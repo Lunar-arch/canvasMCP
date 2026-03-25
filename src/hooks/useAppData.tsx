@@ -1,0 +1,360 @@
+"use client";
+
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  ReactNode,
+} from "react";
+import { v4 as uuid } from "uuid";
+import {
+  AppData,
+  StudyTask,
+  TaskBlock,
+  Tag,
+  Course,
+  Assignment,
+  CanvasConfig,
+  FilterState,
+  AppSettings,
+} from "@/types";
+import { loadData, saveData } from "@/lib/storage";
+import { COURSE_COLORS } from "@/lib/colors";
+
+interface AppContextType {
+  data: AppData;
+  isLoaded: boolean;
+  // Config
+  saveConfig: (config: CanvasConfig) => void;
+  // Sync
+  syncFromCanvas: (courses: Course[], assignments: Assignment[]) => void;
+  // Tasks
+  createTask: (input: Partial<StudyTask>) => StudyTask;
+  updateTask: (id: string, updates: Partial<StudyTask>) => void;
+  deleteTask: (id: string) => void;
+  completeTask: (id: string) => void;
+  // Blocks
+  createBlock: (name: string, color: string) => TaskBlock;
+  updateBlock: (id: string, updates: Partial<TaskBlock>) => void;
+  deleteBlock: (id: string) => void;
+  moveTaskToBlock: (taskId: string, blockId: string | undefined) => void;
+  reorderTasks: (taskIds: string[]) => void;
+  // Tags
+  createTag: (name: string, color: string) => Tag;
+  // Courses
+  createCourse: (name: string, course_code?: string, color?: string) => Course;
+  deleteTag: (id: string) => void;
+  addTagToTask: (taskId: string, tagId: string) => void;
+  removeTagFromTask: (taskId: string, tagId: string) => void;
+  // Settings
+  updateSettings: (settings: Partial<AppSettings>) => void;
+}
+
+const AppContext = createContext<AppContextType | null>(null);
+
+export function AppProvider({ children }: { children: ReactNode }) {
+  const [data, setData] = useState<AppData>(loadData());
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    setData(loadData());
+    setIsLoaded(true);
+  }, []);
+
+  const persist = useCallback((updater: (prev: AppData) => AppData) => {
+    setData((prev) => {
+      const next = updater(prev);
+      saveData(next);
+      return next;
+    });
+  }, []);
+
+  const saveConfig = useCallback(
+    (config: CanvasConfig) => {
+      persist((d) => ({ ...d, config }));
+    },
+    [persist]
+  );
+
+  const syncFromCanvas = useCallback(
+    (courses: Course[], assignments: Assignment[]) => {
+      persist((d) => {
+        const coloredCourses = courses.map((c, i) => ({
+          ...c,
+          color: COURSE_COLORS[i % COURSE_COLORS.length],
+        }));
+
+        const existingTaskMap = new Map(
+          d.tasks
+            .filter((t) => t.assignmentId)
+            .map((t) => [t.assignmentId!, t])
+        );
+
+        const excluded = d.settings?.excludedCourseIds || [];
+
+        const tasks: StudyTask[] = assignments
+          .filter((a) => !excluded.includes(a.course_id))
+          .map((a, i) => {
+          const existing = existingTaskMap.get(a.id);
+          const course = coloredCourses.find((c) => c.id === a.course_id);
+          return {
+            id: existing?.id || uuid(),
+            assignmentId: a.id,
+            courseId: a.course_id,
+            title: a.name,
+            courseName: course?.name || a.course_name || "Unknown Course",
+            dueAt: a.due_at,
+            pointsPossible: a.points_possible,
+            htmlUrl: a.html_url,
+            completed: existing?.completed || false,
+            estimatedMinutes: existing?.estimatedMinutes || 25,
+            priority: existing?.priority || "medium",
+            tags: existing?.tags || [],
+            blockId: existing?.blockId,
+            order: existing?.order ?? i,
+          };
+          });
+
+        return {
+          ...d,
+          courses: coloredCourses,
+          assignments,
+          tasks,
+          lastSynced: new Date().toISOString(),
+        };
+      });
+    },
+    [persist]
+  );
+
+  const createTask = useCallback(
+    (input: Partial<StudyTask>) => {
+      const task: StudyTask = {
+        id: uuid(),
+        assignmentId: undefined,
+        courseId: input.courseId,
+        title: input.title || "New Task",
+        description: input.description,
+        courseName: input.courseName,
+        dueAt: input.dueAt ?? null,
+        pointsPossible: input.pointsPossible ?? null,
+        htmlUrl: input.htmlUrl,
+        completed: input.completed ?? false,
+        estimatedMinutes: input.estimatedMinutes ?? 25,
+        priority: input.priority ?? "medium",
+        tags: input.tags ?? [],
+        blockId: input.blockId,
+        order:
+          input.order ??
+          (data.tasks.filter((t) => t.blockId === input.blockId).length ?? 0),
+        custom: true,
+      };
+      persist((d) => ({ ...d, tasks: [...d.tasks, task] }));
+      return task;
+    },
+    [persist, data.tasks]
+  );
+
+  const deleteTask = useCallback(
+    (id: string) => {
+      persist((d) => ({ ...d, tasks: d.tasks.filter((t) => t.id !== id) }));
+    },
+    [persist]
+  );
+
+  const updateTask = useCallback(
+    (id: string, updates: Partial<StudyTask>) => {
+      persist((d) => ({
+        ...d,
+        tasks: d.tasks.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+      }));
+    },
+    [persist]
+  );
+
+  const completeTask = useCallback(
+    (id: string) => {
+      persist((d) => ({
+        ...d,
+        tasks: d.tasks.map((t) =>
+          t.id === id ? { ...t, completed: !t.completed } : t
+        ),
+      }));
+    },
+    [persist]
+  );
+
+  const createBlock = useCallback(
+    (name: string, color: string) => {
+      const block: TaskBlock = {
+        id: uuid(),
+        name,
+        color,
+        order: data.blocks.length,
+      };
+      persist((d) => ({ ...d, blocks: [...d.blocks, block] }));
+      return block;
+    },
+    [persist, data.blocks.length]
+  );
+
+  const updateBlock = useCallback(
+    (id: string, updates: Partial<TaskBlock>) => {
+      persist((d) => ({
+        ...d,
+        blocks: d.blocks.map((b) => (b.id === id ? { ...b, ...updates } : b)),
+      }));
+    },
+    [persist]
+  );
+
+  const deleteBlock = useCallback(
+    (id: string) => {
+      persist((d) => ({
+        ...d,
+        blocks: d.blocks.filter((b) => b.id !== id),
+        tasks: d.tasks.map((t) =>
+          t.blockId === id ? { ...t, blockId: undefined } : t
+        ),
+      }));
+    },
+    [persist]
+  );
+
+  const moveTaskToBlock = useCallback(
+    (taskId: string, blockId: string | undefined) => {
+      persist((d) => ({
+        ...d,
+        tasks: d.tasks.map((t) =>
+          t.id === taskId ? { ...t, blockId } : t
+        ),
+      }));
+    },
+    [persist]
+  );
+
+  const reorderTasks = useCallback(
+    (taskIds: string[]) => {
+      persist((d) => ({
+        ...d,
+        tasks: d.tasks.map((t) => {
+          const idx = taskIds.indexOf(t.id);
+          return idx !== -1 ? { ...t, order: idx } : t;
+        }),
+      }));
+    },
+    [persist]
+  );
+
+  const createTag = useCallback(
+    (name: string, color: string) => {
+      const tag: Tag = { id: uuid(), name, color };
+      persist((d) => ({ ...d, tags: [...d.tags, tag] }));
+      return tag;
+    },
+    [persist]
+  );
+
+  const createCourse = useCallback(
+    (name: string, course_code?: string, color?: string) => {
+      const nextId = Math.max(0, ...data.courses.map((c) => c.id)) + 1;
+      const course: Course = {
+        id: nextId,
+        name,
+        course_code: course_code || `COURSE-${nextId}`,
+        color: color || COURSE_COLORS[data.courses.length % COURSE_COLORS.length],
+      };
+      persist((d) => ({ ...d, courses: [...d.courses, course] }));
+      return course;
+    },
+    [persist, data.courses]
+  );
+
+  const deleteTag = useCallback(
+    (id: string) => {
+      persist((d) => ({
+        ...d,
+        tags: d.tags.filter((t) => t.id !== id),
+        tasks: d.tasks.map((t) => ({
+          ...t,
+          tags: t.tags.filter((tagId) => tagId !== id),
+        })),
+      }));
+    },
+    [persist]
+  );
+
+  const addTagToTask = useCallback(
+    (taskId: string, tagId: string) => {
+      persist((d) => ({
+        ...d,
+        tasks: d.tasks.map((t) =>
+          t.id === taskId && !t.tags.includes(tagId)
+            ? { ...t, tags: [...t.tags, tagId] }
+            : t
+        ),
+      }));
+    },
+    [persist]
+  );
+
+  const removeTagFromTask = useCallback(
+    (taskId: string, tagId: string) => {
+      persist((d) => ({
+        ...d,
+        tasks: d.tasks.map((t) =>
+          t.id === taskId
+            ? { ...t, tags: t.tags.filter((id) => id !== tagId) }
+            : t
+        ),
+      }));
+    },
+    [persist]
+  );
+
+  const updateSettings = useCallback(
+    (settings: Partial<AppSettings>) => {
+      persist((d) => ({
+        ...d,
+        settings: { ...d.settings, ...settings },
+      }));
+    },
+    [persist]
+  );
+
+  return (
+    <AppContext.Provider
+      value={{
+        data,
+        isLoaded,
+        saveConfig,
+        syncFromCanvas,
+        createTask,
+        updateTask,
+        deleteTask,
+        completeTask,
+        createBlock,
+        updateBlock,
+        deleteBlock,
+        moveTaskToBlock,
+        reorderTasks,
+        createTag,
+            createCourse,
+        deleteTag,
+        addTagToTask,
+        removeTagFromTask,
+        updateSettings,
+      }}
+    >
+      {children}
+    </AppContext.Provider>
+  );
+}
+
+export function useAppData() {
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error("useAppData must be used within AppProvider");
+  return ctx;
+}

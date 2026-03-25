@@ -1,0 +1,459 @@
+"use client";
+
+import { useState } from "react";
+import { StudyTask, Tag, Course } from "@/types";
+import { motion } from "motion/react";
+import {
+  X,
+  ExternalLink,
+  Clock,
+  Star,
+  Tag as TagIcon,
+  Calendar,
+  Plus,
+  Check,
+  FileText,
+} from "lucide-react";
+import { TAG_COLORS } from "@/lib/colors";
+import { cn } from "@/lib/cn";
+
+const PRIORITY_OPTIONS = [
+  { value: "low", label: "Low", color: "#94a3b8" },
+  { value: "medium", label: "Medium", color: "#f59e0b" },
+  { value: "high", label: "High", color: "#f97316" },
+  { value: "urgent", label: "Urgent", color: "#ef4444" },
+] as const;
+
+interface TaskEditModalProps {
+  task: StudyTask;
+  tags: Tag[];
+  courses: Course[];
+  onUpdate: (updates: Partial<StudyTask>) => void;
+  onAddTag: (tagId: string) => void;
+  onRemoveTag: (tagId: string) => void;
+  onCreateTag: (name: string, color: string) => Tag;
+  onCreateCourse?: (name: string, course_code?: string, color?: string) => Course;
+  onClose: () => void;
+  onDelete?: () => void;
+}
+
+export function TaskEditModal({
+  task,
+  tags,
+  onUpdate,
+  onAddTag,
+  onRemoveTag,
+  onCreateTag,
+  onClose,
+  onDelete,
+}: TaskEditModalProps) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description || "");
+  const [dueAt, setDueAt] = useState(
+    task.dueAt ? task.dueAt.slice(0, 16) : ""
+  );
+  const [estimatedMinutes, setEstimatedMinutes] = useState(
+    task.estimatedMinutes
+  );
+  const [priority, setPriority] = useState(task.priority);
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState(TAG_COLORS[0]);
+  const [showNewTag, setShowNewTag] = useState(false);
+  const [selectedCourseId, setSelectedCourseId] = useState<number | "">(
+    task.courseId ?? ""
+  );
+  const [showNewCourse, setShowNewCourse] = useState(false);
+  const [newCourseName, setNewCourseName] = useState("");
+  const [newCourseCode, setNewCourseCode] = useState("");
+  const [newCourseColor, setNewCourseColor] = useState<string>("#6366f1");
+
+  const taskTags = tags.filter((t) => task.tags.includes(t.id));
+  const availableTags = tags.filter((t) => !task.tags.includes(t.id));
+
+  const handleSave = () => {
+    onUpdate({
+      title: title.trim() || task.title,
+      description: description.trim() || undefined,
+      dueAt: dueAt ? new Date(dueAt).toISOString() : null,
+      estimatedMinutes,
+      priority,
+      courseId: selectedCourseId === "" ? undefined : selectedCourseId,
+      courseName:
+        selectedCourseId === ""
+          ? undefined
+          : courses.find((c) => c.id === selectedCourseId)?.name,
+    });
+    onClose();
+  };
+
+  const handleCreateTag = () => {
+    if (newTagName.trim()) {
+      const tag = onCreateTag(newTagName.trim(), newTagColor);
+      onAddTag(tag.id);
+      setNewTagName("");
+      setShowNewTag(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[90] flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+
+      {/* Modal */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-lg bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] shadow-2xl overflow-hidden"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 pb-0">
+          <h2 className="text-lg font-bold">Edit Task</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
+          {/* Title */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5" />
+              Title
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+            />
+          </div>
+
+          {/* Description */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5" />
+              Description
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Add notes or details..."
+              rows={3}
+              className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)] resize-none"
+            />
+          </div>
+
+          {/* Due Date & Estimated Time */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5" />
+                Due Date
+              </label>
+              <input
+                type="datetime-local"
+                value={dueAt}
+                onChange={(e) => setDueAt(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" />
+                Estimated Time
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={estimatedMinutes}
+                  onChange={(e) =>
+                    setEstimatedMinutes(parseInt(e.target.value) || 25)
+                  }
+                  min={1}
+                  className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                />
+                <span className="text-sm text-[var(--text-muted)] shrink-0">
+                  min
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Priority */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1.5">
+              <Star className="w-3.5 h-3.5" />
+              Priority
+            </label>
+            <div className="flex gap-2">
+              {PRIORITY_OPTIONS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setPriority(p.value)}
+                  className={cn(
+                    "flex-1 px-3 py-2 rounded-xl text-sm font-medium border-2 transition-all",
+                    priority === p.value
+                      ? "border-current shadow-sm"
+                      : "border-transparent bg-[var(--bg)] hover:bg-[var(--bg-hover)]"
+                  )}
+                  style={{
+                    color: priority === p.value ? p.color : undefined,
+                    backgroundColor:
+                      priority === p.value ? p.color + "15" : undefined,
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tags */}
+          {/* Course selector */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1.5">
+              Course
+            </label>
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedCourseId}
+                onChange={(e) => setSelectedCourseId(e.target.value === "" ? "" : Number(e.target.value))}
+                className="flex-1 px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              >
+                <option value="">No course</option>
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              {onCreateCourse && (
+                <button
+                  type="button"
+                  onClick={() => setShowNewCourse((s) => !s)}
+                  className="px-3 py-2 rounded-xl border border-[var(--border)] text-sm hover:bg-[var(--bg-hover)] transition-colors"
+                >
+                  Create
+                </button>
+              )}
+            </div>
+            {showNewCourse && onCreateCourse && (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={newCourseName}
+                  onChange={(e) => setNewCourseName(e.target.value)}
+                  placeholder="Course name"
+                  className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newCourseCode}
+                    onChange={(e) => setNewCourseCode(e.target.value)}
+                    placeholder="Course code"
+                    className="flex-1 px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  />
+                  <input
+                    type="color"
+                    value={newCourseColor}
+                    onChange={(e) => setNewCourseColor(e.target.value)}
+                    className="w-14 h-10 p-0 border-0 bg-transparent"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newCourseName.trim()) return;
+                      const c = onCreateCourse(newCourseName.trim(), newCourseCode.trim() || undefined, newCourseColor);
+                      setSelectedCourseId(c.id);
+                      setShowNewCourse(false);
+                      setNewCourseName("");
+                      setNewCourseCode("");
+                    }}
+                    className="px-4 py-2 rounded-xl bg-[var(--primary)] text-white text-sm"
+                  >
+                    Create
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCourse(false)}
+                    className="px-4 py-2 rounded-xl bg-[var(--bg)] text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1.5">
+              <TagIcon className="w-3.5 h-3.5" />
+              Tags
+            </label>
+            {/* Current tags */}
+            <div className="flex flex-wrap gap-2">
+              {taskTags.map((tag) => (
+                <span
+                  key={tag.id}
+                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg text-white"
+                  style={{ backgroundColor: tag.color }}
+                >
+                  {tag.name}
+                  <button
+                    type="button"
+                    onClick={() => onRemoveTag(tag.id)}
+                    className="hover:bg-white/20 rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            {/* Add existing tags */}
+            {availableTags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {availableTags.map((tag) => (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => onAddTag(tag.id)}
+                    className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border border-[var(--border)] hover:bg-[var(--bg-hover)] transition-colors"
+                  >
+                    <div
+                      className="w-2.5 h-2.5 rounded-full"
+                      style={{ backgroundColor: tag.color }}
+                    />
+                    {tag.name}
+                    <Plus className="w-3 h-3 text-[var(--text-muted)]" />
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* Create new tag */}
+            {!showNewTag ? (
+              <button
+                type="button"
+                onClick={() => setShowNewTag(true)}
+                className="inline-flex items-center gap-1.5 text-xs text-[var(--primary)] hover:text-[var(--primary-hover)] font-medium"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Create new tag
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <button
+                    type="button"
+                    className="w-7 h-7 rounded-full border-2 border-white shadow-sm"
+                    style={{ backgroundColor: newTagColor }}
+                  />
+                  <div className="absolute left-0 top-full mt-1 flex gap-1 bg-[var(--bg-card)] p-2 rounded-lg border border-[var(--border)] shadow-lg z-10">
+                    {TAG_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setNewTagColor(c)}
+                        className={cn(
+                          "w-5 h-5 rounded-full transition-transform",
+                          newTagColor === c &&
+                            "scale-125 ring-2 ring-offset-1 ring-current"
+                        )}
+                        style={{ backgroundColor: c, color: c }}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  value={newTagName}
+                  onChange={(e) => setNewTagName(e.target.value)}
+                  placeholder="Tag name"
+                  className="flex-1 text-sm px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreateTag();
+                    if (e.key === "Escape") setShowNewTag(false);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateTag}
+                  className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)]"
+                >
+                  <Check className="w-4 h-4 text-[var(--success)]" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Canvas link */}
+          {task.htmlUrl && (
+            <a
+              href={task.htmlUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm text-[var(--primary)] hover:underline"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Open in Canvas
+            </a>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-3 p-5 pt-0">
+          <button
+            type="button"
+            onClick={() => {
+              if (!onDelete) return;
+              if (confirm("Delete this task? This cannot be undone.")) {
+                onDelete();
+                onClose();
+              }
+            }}
+            disabled={!onDelete}
+            className={cn(
+              "px-4 py-2.5 rounded-xl text-sm font-medium transition-colors",
+              onDelete
+                ? "text-[var(--danger)] hover:bg-red-50"
+                : "text-[var(--text-muted)] opacity-40 cursor-not-allowed"
+            )}
+          >
+            Delete
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-[var(--bg-hover)] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            className="px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white text-sm font-medium hover:bg-[var(--primary-hover)] transition-colors"
+          >
+            Save Changes
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
