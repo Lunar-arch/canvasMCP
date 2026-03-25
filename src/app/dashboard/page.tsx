@@ -97,6 +97,8 @@ export default function DashboardPage() {
     updateBlock,
     deleteBlock,
     moveTaskToBlock,
+    reorderTasks,
+    createCourse,
     createTask,
     deleteTask,
     createTag,

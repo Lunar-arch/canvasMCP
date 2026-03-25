@@ -40,10 +40,12 @@ interface TaskEditModalProps {
 export function TaskEditModal({
   task,
   tags,
+  courses,
   onUpdate,
   onAddTag,
   onRemoveTag,
   onCreateTag,
+  onCreateCourse,
   onClose,
   onDelete,
 }: TaskEditModalProps) {
