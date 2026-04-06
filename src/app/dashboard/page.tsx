@@ -128,6 +128,7 @@ export default function DashboardPage() {
   const [focusIndex, setFocusIndex] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [multiDragIds, setMultiDragIds] = useState<Set<string> | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [creatingTaskId, setCreatingTaskId] = useState<string | null>(null);
 
@@ -135,6 +136,12 @@ export default function DashboardPage() {
   const [quickTitle, setQuickTitle] = useState("");
   const [showAddDropdown, setShowAddDropdown] = useState(false);
   const addDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Bulk edit local state
+  const [bulkEstimateValue, setBulkEstimateValue] = useState("");
+  const [bulkDateValue, setBulkDateValue] = useState("");
+  const [bulkDescription, setBulkDescription] = useState("");
+  const [showBulkDatePicker, setShowBulkDatePicker] = useState(false);
 
   // Selection state
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
@@ -334,27 +341,82 @@ export default function DashboardPage() {
     selectedTaskIds.forEach((id) => updateTask(id, { priority }));
   };
 
+  const bulkSetCourse = (courseId: number, courseName: string) => {
+    selectedTaskIds.forEach((id) => updateTask(id, { courseId, courseName }));
+  };
+
+  const bulkAddTag = (tagId: string) => {
+    selectedTaskIds.forEach((id) => {
+      const task = data.tasks.find((t) => t.id === id);
+      if (task && !task.tags.includes(tagId)) addTagToTask(id, tagId);
+    });
+  };
+
+  const bulkRemoveTag = (tagId: string) => {
+    selectedTaskIds.forEach((id) => removeTagFromTask(id, tagId));
+  };
+
+  const bulkSetEstimate = (minutes: number) => {
+    selectedTaskIds.forEach((id) => updateTask(id, { estimatedMinutes: minutes }));
+  };
+
+  const bulkSetDueDate = (dueAt: string | null) => {
+    selectedTaskIds.forEach((id) => updateTask(id, { dueAt }));
+  };
+
+  const bulkSetDescription = (description: string) => {
+    selectedTaskIds.forEach((id) => updateTask(id, { description }));
+  };
+
+  const bulkMoveToBlock = (blockId: string | undefined) => {
+    selectedTaskIds.forEach((id) => moveTaskToBlock(id, blockId));
+  };
+
   // DnD handlers
   const handleDragStart = (event: DragStartEvent) => {
-    setDraggedId(event.active.id as string);
+    const activeId = event.active.id as string;
+    setDraggedId(activeId);
+    if (selectedTaskIds.has(activeId) && selectedTaskIds.size > 1) {
+      setMultiDragIds(new Set(selectedTaskIds));
+    } else {
+      setMultiDragIds(null);
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     setDraggedId(null);
     const { active, over } = event;
-    if (!over) return;
+    if (!over) { setMultiDragIds(null); return; }
 
     const taskId = active.id as string;
     const activeTask = data.tasks.find((t) => t.id === taskId);
+    if (!activeTask) { setMultiDragIds(null); return; }
+
+    const overId = String(over.id);
+
+    // Determine destination block
+    let destBlockId: string | undefined;
+    if (overId.startsWith("block-")) {
+      destBlockId = overId.replace("block-", "");
+    } else if (overId === "unblocked") {
+      destBlockId = undefined;
+    } else {
+      const destTask = data.tasks.find((t) => t.id === overId);
+      if (destTask) destBlockId = destTask.blockId;
+    }
+
+    // Multi-drag: move all selected tasks to destination block preserving relative order
+    if (multiDragIds && multiDragIds.size > 1) {
+      const orderedIds = allVisibleTasks.filter((t) => multiDragIds.has(t.id)).map((t) => t.id);
+      orderedIds.forEach((id) => moveTaskToBlock(id, destBlockId));
+      setMultiDragIds(null);
+      return;
+    }
+
     if (active.id === over.id) return;
 
-    const activeId = String(active.id);
-    const overId = String(over.id);
-    if (!activeTask) return;
-
     if (overId.startsWith("block-")) {
-      const blockId = overId.replace("block-", "");
-      moveTaskToBlock(taskId, blockId);
+      moveTaskToBlock(taskId, destBlockId);
       return;
     }
 
@@ -645,6 +707,7 @@ export default function DashboardPage() {
                       block={block}
                       tasks={blockTasks[block.id] || []}
                       tags={data.tags}
+                      courses={data.courses}
                       courseColors={courseColors}
                       onPlayBlock={() => startFocusBlock(block.id)}
                       onToggleComplete={completeTask}
@@ -654,24 +717,15 @@ export default function DashboardPage() {
                       onDeleteBlock={() => deleteBlock(block.id)}
                       onAddTag={addTagToTask}
                       onRemoveTag={removeTagFromTask}
+                      onBulkUpdateTasks={(updates) => {
+                        (blockTasks[block.id] || []).forEach((t) => updateTask(t.id, updates));
+                      }}
                       onEditTask={(taskId) => setEditingTaskId(taskId)}
                       onDeleteTask={(taskId) => deleteTask(taskId)}
                       selectedTaskIds={selectedTaskIds}
                       onSelectTask={handleTaskSelect}
                     />
                   ))}
-
-                  {/* New block button */}
-                  <button
-                    onClick={() => {
-                      const name = `Block ${data.blocks.length + 1}`;
-                      createBlock(name, BLOCK_COLORS[data.blocks.length % BLOCK_COLORS.length]);
-                    }}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border-2 border-dashed border-[var(--border)] text-sm text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
-                  >
-                    <Layers className="w-4 h-4" />
-                    New Block
-                  </button>
 
                   {/* Unblocked tasks */}
                   <DroppableUnblocked>
@@ -716,18 +770,34 @@ export default function DashboardPage() {
                 </div>
 
                 <DragOverlay>
-                  {draggedId ? (
-                    <div className="drag-overlay">
-                      <TaskCard
-                        task={data.tasks.find((t) => t.id === draggedId)!}
-                        tags={data.tags}
-                        onToggleComplete={() => {}}
-                        onPlay={() => {}}
-                        onUpdate={() => {}}
-                        onAddTag={() => {}}
-                        onRemoveTag={() => {}}
-                        isDragging
-                      />
+                  {draggedId && data.tasks.find((t) => t.id === draggedId) ? (
+                    <div className="relative">
+                      {/* Shadow cards for multi-drag stack effect */}
+                      {multiDragIds && multiDragIds.size > 1 && (
+                        <>
+                          <div className="absolute inset-0 translate-x-2 translate-y-2 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] opacity-50 pointer-events-none" />
+                          {multiDragIds.size > 2 && (
+                            <div className="absolute inset-0 translate-x-4 translate-y-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] opacity-25 pointer-events-none" />
+                          )}
+                        </>
+                      )}
+                      <div className="relative">
+                        <TaskCard
+                          task={data.tasks.find((t) => t.id === draggedId)!}
+                          tags={data.tags}
+                          onToggleComplete={() => {}}
+                          onPlay={() => {}}
+                          onUpdate={() => {}}
+                          onAddTag={() => {}}
+                          onRemoveTag={() => {}}
+                          isDragging
+                        />
+                        {multiDragIds && multiDragIds.size > 1 && (
+                          <div className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-[var(--primary)] text-white text-[10px] font-bold flex items-center justify-center shadow-sm z-10">
+                            {multiDragIds.size}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : null}
                 </DragOverlay>
@@ -744,55 +814,210 @@ export default function DashboardPage() {
             initial={{ opacity: 0, x: -16 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -16 }}
-            className="fixed left-4 top-1/2 -translate-y-1/2 z-50 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-2xl p-3 flex flex-col gap-2 w-44"
+            className="fixed left-4 top-1/2 -translate-y-1/2 z-50 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-2xl p-3 flex flex-col gap-0 w-48 max-h-[85vh] overflow-y-auto"
           >
-            <div className="flex items-center justify-between mb-1">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-[var(--text-secondary)]">
                 {selectedTaskIds.size} selected
               </span>
-              <button
-                onClick={clearSelection}
-                className="p-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-muted)]"
-              >
+              <button onClick={clearSelection} className="p-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-muted)]">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <button
-              onClick={bulkComplete}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--bg-hover)] transition-colors w-full text-left"
-            >
-              <CheckCircle2 className="w-4 h-4 text-[var(--success)]" />
-              Complete all
+            {/* Quick actions */}
+            <button onClick={bulkComplete} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm hover:bg-[var(--bg-hover)] transition-colors w-full text-left">
+              <CheckCircle2 className="w-3.5 h-3.5 text-[var(--success)] shrink-0" />
+              <span className="text-xs">Complete all</span>
+            </button>
+            <button onClick={bulkDelete} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm hover:bg-red-50 text-[var(--danger)] transition-colors w-full text-left">
+              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="text-xs">Delete all</span>
             </button>
 
-            <button
-              onClick={bulkDelete}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-red-50 text-[var(--danger)] transition-colors w-full text-left"
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete all
-            </button>
-
-            <div className="border-t border-[var(--border)] pt-2 mt-1">
-              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5 px-1">Set priority</p>
-              <div className="flex flex-col gap-1">
+            {/* Priority — horizontal dots */}
+            <div className="border-t border-[var(--border)] mt-2 pt-2">
+              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Priority</p>
+              <div className="flex items-center gap-1.5">
                 {([null, "low", "medium", "high", "urgent"] as StudyTask["priority"][]).map((p) => (
                   <button
                     key={String(p)}
                     onClick={() => bulkSetPriority(p)}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs hover:bg-[var(--bg-hover)] transition-colors text-left"
-                  >
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{
-                        backgroundColor: p === null ? "#cbd5e1" : p === "low" ? "#94a3b8" : p === "medium" ? "#f59e0b" : p === "high" ? "#f97316" : "#ef4444",
-                      }}
-                    />
-                    {p === null ? "None" : p.charAt(0).toUpperCase() + p.slice(1)}
-                  </button>
+                    title={p === null ? "None" : p.charAt(0).toUpperCase() + p.slice(1)}
+                    className="w-5 h-5 rounded-full border-2 border-transparent hover:scale-110 transition-transform shrink-0"
+                    style={{
+                      backgroundColor: p === null ? "#cbd5e1" : p === "low" ? "#94a3b8" : p === "medium" ? "#f59e0b" : p === "high" ? "#f97316" : "#ef4444",
+                    }}
+                  />
                 ))}
               </div>
+            </div>
+
+            {/* Est. duration — apply on Enter/blur */}
+            <div className="border-t border-[var(--border)] mt-2 pt-2">
+              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Est. duration</p>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="—"
+                  value={bulkEstimateValue}
+                  onChange={(e) => setBulkEstimateValue(e.target.value)}
+                  onBlur={() => {
+                    const val = parseInt(bulkEstimateValue);
+                    if (val > 0) { bulkSetEstimate(val); setBulkEstimateValue(""); }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
+                  className="w-full text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
+                />
+                <span className="text-xs text-[var(--text-muted)] shrink-0">min</span>
+              </div>
+            </div>
+
+            {/* Due date */}
+            <div className="border-t border-[var(--border)] mt-2 pt-2">
+              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Due date</p>
+              {!showBulkDatePicker ? (
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setShowBulkDatePicker(true)}
+                    className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] hover:bg-[var(--bg-hover)] transition-colors text-left text-[var(--text-muted)] truncate"
+                  >
+                    {bulkDateValue ? new Date(bulkDateValue).toLocaleDateString() : "Set date..."}
+                  </button>
+                  <button
+                    onClick={() => { bulkSetDueDate(null); setBulkDateValue(""); }}
+                    className="text-xs px-1.5 py-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-muted)]"
+                    title="Clear"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <input
+                    type="datetime-local"
+                    value={bulkDateValue}
+                    onChange={(e) => setBulkDateValue(e.target.value)}
+                    autoFocus
+                    className="w-full text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
+                  />
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => { if (bulkDateValue) bulkSetDueDate(new Date(bulkDateValue).toISOString()); setShowBulkDatePicker(false); }}
+                      className="flex-1 text-xs px-2 py-1 rounded-lg bg-[var(--primary)] text-white"
+                    >
+                      Apply
+                    </button>
+                    <button onClick={() => setShowBulkDatePicker(false)} className="text-xs px-2 py-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors">✕</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Course */}
+            {data.courses.length > 0 && (
+              <div className="border-t border-[var(--border)] mt-2 pt-2">
+                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Course</p>
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    const courseId = parseInt(e.target.value);
+                    if (!courseId) return;
+                    const course = data.courses.find((c) => c.id === courseId);
+                    if (course) bulkSetCourse(course.id, course.name);
+                    e.target.value = "";
+                  }}
+                  className="w-full text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
+                >
+                  <option value="">Set course...</option>
+                  {data.courses.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Tags */}
+            {data.tags.length > 0 && (
+              <div className="border-t border-[var(--border)] mt-2 pt-2">
+                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Tags</p>
+                <div className="flex flex-wrap gap-1 mb-1.5">
+                  {data.tags.map((tag) => (
+                    <button
+                      key={tag.id}
+                      onClick={() => bulkAddTag(tag.id)}
+                      title={`Add "${tag.name}" to all`}
+                      className="text-[10px] px-1.5 py-0.5 rounded text-white hover:opacity-75 transition-opacity"
+                      style={{ backgroundColor: tag.color }}
+                    >
+                      + {tag.name}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {data.tags.map((tag) => (
+                    <button
+                      key={tag.id}
+                      onClick={() => bulkRemoveTag(tag.id)}
+                      title={`Remove "${tag.name}" from all`}
+                      className="text-[10px] px-1.5 py-0.5 rounded border hover:opacity-75 transition-opacity"
+                      style={{ borderColor: tag.color, color: tag.color }}
+                    >
+                      − {tag.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Move to block */}
+            {data.blocks.length > 0 && (
+              <div className="border-t border-[var(--border)] mt-2 pt-2">
+                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Move to block</p>
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    bulkMoveToBlock(val === "none" ? undefined : val || undefined);
+                    e.target.value = "";
+                  }}
+                  className="w-full text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
+                >
+                  <option value="">Move to...</option>
+                  <option value="none">Unsorted</option>
+                  {data.blocks.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Description */}
+            <div className="border-t border-[var(--border)] mt-2 pt-2">
+              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Description</p>
+              <textarea
+                rows={2}
+                placeholder="Set description..."
+                value={bulkDescription}
+                onChange={(e) => setBulkDescription(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                    if (bulkDescription.trim()) { bulkSetDescription(bulkDescription.trim()); setBulkDescription(""); }
+                  }
+                }}
+                className="w-full text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)] resize-none"
+              />
+              <button
+                onClick={() => { if (bulkDescription.trim()) { bulkSetDescription(bulkDescription.trim()); setBulkDescription(""); } }}
+                disabled={!bulkDescription.trim()}
+                className="w-full mt-1 text-xs px-2 py-1.5 rounded-lg bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-40"
+              >
+                Apply to all
+              </button>
             </div>
           </motion.div>
         )}

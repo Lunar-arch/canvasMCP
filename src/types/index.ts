@@ -142,6 +142,7 @@ export interface TaskBlock {
   name: string;
   color: string;
   order: number;
+  breakMinutes?: number;
 }
 
 export interface AppData {
