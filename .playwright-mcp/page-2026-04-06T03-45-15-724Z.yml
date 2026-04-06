@@ -1,0 +1,17 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - heading "RapidIdentity" [level=1] [ref=e6]
+  - main [ref=e7]:
+    - generic [ref=e8]:
+      - img [ref=e9]
+      - generic [ref=e10]:
+        - heading "Login" [level=1] [ref=e12]
+        - button "Need help?" [ref=e14] [cursor=pointer]
+      - generic [ref=e15]:
+        - generic [ref=e30]:
+          - textbox "Password" [active] [ref=e32]
+          - button "Show Password" [ref=e33]
+        - link "Forgot Password?" [ref=e35] [cursor=pointer]:
+          - /url: "#"
+        - button "Go" [ref=e22] [cursor=pointer]
+        - button "Start Over" [ref=e37] [cursor=pointer]

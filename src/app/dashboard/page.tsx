@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useAppData } from "@/hooks/useAppData";
 import { useFilteredTasks } from "@/hooks/useFilteredTasks";
 import { FilterState, StudyTask, ViewMode } from "@/types";
@@ -22,6 +22,11 @@ import {
   BookOpen,
   Loader2,
   ArrowLeft,
+  ChevronDown,
+  Trash2,
+  CheckCircle2,
+  X,
+  Layers,
 } from "lucide-react";
 import {
   DndContext,
@@ -86,7 +91,6 @@ const defaultFilters: FilterState = {
   hideCompleted: false,
 };
 
-
 export default function DashboardPage() {
   const {
     data,
@@ -124,10 +128,17 @@ export default function DashboardPage() {
   const [focusIndex, setFocusIndex] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [newBlockName, setNewBlockName] = useState("");
-  const [showNewBlock, setShowNewBlock] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [creatingTaskId, setCreatingTaskId] = useState<string | null>(null);
+
+  // Quick-add input state
+  const [quickTitle, setQuickTitle] = useState("");
+  const [showAddDropdown, setShowAddDropdown] = useState(false);
+  const addDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Selection state
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -143,7 +154,6 @@ export default function DashboardPage() {
     return map;
   }, [data.courses]);
 
-  // Tasks organized by block
   const unblockedTasks = useMemo(
     () =>
       filteredTasks
@@ -161,6 +171,12 @@ export default function DashboardPage() {
     });
     return map;
   }, [data.blocks, filteredTasks]);
+
+  // All visible tasks in display order (blocks first, then unblocked)
+  const allVisibleTasks = useMemo(() => {
+    const fromBlocks = data.blocks.flatMap((b) => blockTasks[b.id] || []);
+    return [...fromBlocks, ...unblockedTasks];
+  }, [data.blocks, blockTasks, unblockedTasks]);
 
   // Focus mode handlers
   const startFocusAll = useCallback(() => {
@@ -214,6 +230,110 @@ export default function DashboardPage() {
     }
   };
 
+  // Quick-add handlers
+  const handleQuickAddTask = useCallback(
+    ({ openEditor = false }: { openEditor?: boolean } = {}) => {
+      const title = quickTitle.trim();
+      if (!title) return;
+      const task = createTask({ title });
+
+      if (openEditor) {
+        setCreatingTaskId(task.id);
+        setTimeout(() => setEditingTaskId(task.id), 0);
+      }
+
+      setQuickTitle("");
+      setShowAddDropdown(false);
+    },
+    [quickTitle, createTask]
+  );
+
+  const handleQuickAddBlock = useCallback(() => {
+    const name = quickTitle.trim();
+    if (!name) return;
+    createBlock(name, BLOCK_COLORS[data.blocks.length % BLOCK_COLORS.length]);
+    setQuickTitle("");
+    setShowAddDropdown(false);
+  }, [quickTitle, createBlock, data.blocks.length]);
+
+  const handleQuickKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      handleQuickAddTask({ openEditor: true });
+    } else if (e.key === "Enter" && e.shiftKey) {
+      e.preventDefault();
+      handleQuickAddBlock();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      handleQuickAddTask();
+    } else if (e.key === "Escape") {
+      setQuickTitle("");
+    }
+  };
+
+  const handleQuickTaskOnlyKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleQuickAddTask({ openEditor: e.ctrlKey || e.metaKey });
+    } else if (e.key === "Escape") {
+      setQuickTitle("");
+    }
+  };
+
+  // Selection handler
+  const handleTaskSelect = useCallback(
+    (taskId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (e.shiftKey && lastSelectedId) {
+        const allIds = allVisibleTasks.map((t) => t.id);
+        const startIdx = allIds.indexOf(lastSelectedId);
+        const endIdx = allIds.indexOf(taskId);
+        if (startIdx !== -1 && endIdx !== -1) {
+          const [lo, hi] = [Math.min(startIdx, endIdx), Math.max(startIdx, endIdx)];
+          setSelectedTaskIds(new Set(allIds.slice(lo, hi + 1)));
+        }
+      } else if (e.ctrlKey || e.metaKey) {
+        setSelectedTaskIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(taskId)) next.delete(taskId);
+          else next.add(taskId);
+          return next;
+        });
+        setLastSelectedId(taskId);
+      } else {
+        if (selectedTaskIds.size === 1 && selectedTaskIds.has(taskId)) {
+          setSelectedTaskIds(new Set());
+          setLastSelectedId(null);
+        } else {
+          setSelectedTaskIds(new Set([taskId]));
+          setLastSelectedId(taskId);
+        }
+      }
+    },
+    [allVisibleTasks, lastSelectedId, selectedTaskIds]
+  );
+
+  const clearSelection = () => {
+    setSelectedTaskIds(new Set());
+    setLastSelectedId(null);
+  };
+
+  // Bulk actions
+  const bulkComplete = () => {
+    selectedTaskIds.forEach((id) => completeTask(id));
+    clearSelection();
+  };
+
+  const bulkDelete = () => {
+    if (!confirm(`Delete ${selectedTaskIds.size} task(s)? This cannot be undone.`)) return;
+    selectedTaskIds.forEach((id) => deleteTask(id));
+    clearSelection();
+  };
+
+  const bulkSetPriority = (priority: StudyTask["priority"]) => {
+    selectedTaskIds.forEach((id) => updateTask(id, { priority }));
+  };
+
   // DnD handlers
   const handleDragStart = (event: DragStartEvent) => {
     setDraggedId(event.active.id as string);
@@ -225,7 +345,6 @@ export default function DashboardPage() {
     if (!over) return;
 
     const taskId = active.id as string;
-    if (!over) return;
     const activeTask = data.tasks.find((t) => t.id === taskId);
     if (active.id === over.id) return;
 
@@ -233,27 +352,23 @@ export default function DashboardPage() {
     const overId = String(over.id);
     if (!activeTask) return;
 
-    // Dropped onto a block container (empty area)
     if (overId.startsWith("block-")) {
       const blockId = overId.replace("block-", "");
       moveTaskToBlock(taskId, blockId);
       return;
     }
 
-    // Dropped to unblocked container
     if (overId === "unblocked") {
       moveTaskToBlock(taskId, undefined);
       return;
     }
 
-    // Dropped onto another task => possible reordering or cross-block insert
     const destTask = data.tasks.find((t) => t.id === overId);
     if (!destTask) return;
 
     const sourceBlock = activeTask.blockId;
     const destBlock = destTask.blockId;
 
-    // Reorder within same block (including both undefined)
     if (sourceBlock === destBlock) {
       const list = (sourceBlock ? blockTasks[sourceBlock] || [] : unblockedTasks).map((t) => t.id);
       const oldIndex = list.indexOf(taskId);
@@ -265,30 +380,16 @@ export default function DashboardPage() {
       return;
     }
 
-    // Move across blocks: place before destTask in destination list
     const destList = (destBlock ? blockTasks[destBlock] || [] : unblockedTasks).map((t) => t.id).filter((id) => id !== taskId);
     const insertIndex = destList.indexOf(overId);
     const nextDest = [...destList];
     nextDest.splice(insertIndex === -1 ? nextDest.length : insertIndex, 0, taskId);
 
-    // Update block assignment then reorder destination and source
     moveTaskToBlock(taskId, destBlock);
     reorderTasks(nextDest);
 
-    // Reorder source list (remove the moved task)
     const sourceList = (sourceBlock ? blockTasks[sourceBlock] || [] : unblockedTasks).map((t) => t.id).filter((id) => id !== taskId);
     reorderTasks(sourceList);
-  };
-
-  const handleCreateBlock = () => {
-    if (newBlockName.trim()) {
-      createBlock(
-        newBlockName.trim(),
-        BLOCK_COLORS[data.blocks.length % BLOCK_COLORS.length]
-      );
-      setNewBlockName("");
-      setShowNewBlock(false);
-    }
   };
 
   if (!isLoaded) {
@@ -327,7 +428,6 @@ export default function DashboardPage() {
               </div>
 
               <div className="flex items-center gap-3">
-                {/* Play all button */}
                 {totalRemainingSeconds > 0 && (
                   <span className="text-xs text-[var(--text-secondary)] mr-2">
                     Remaining {formatSeconds(totalRemainingSeconds)}
@@ -340,19 +440,6 @@ export default function DashboardPage() {
                 >
                   <Play className="w-4 h-4" />
                   Focus
-                </button>
-                <button
-                  onClick={() => {
-                    const t = createTask({ title: "New Task" });
-                    // mark as freshly created so modal can behave accordingly
-                    setCreatingTaskId(t.id);
-                    // schedule opening the editor to allow state to update
-                    setTimeout(() => setEditingTaskId(t.id), 0);
-                  }}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl border border-[var(--border)] text-sm hover:bg-[var(--bg-hover)] transition-colors"
-                  title="Create task"
-                >
-                  <Plus className="w-4 h-4" />
                 </button>
 
                 {/* Filter */}
@@ -456,15 +543,35 @@ export default function DashboardPage() {
               </div>
               <h2 className="text-xl font-semibold">No tasks yet</h2>
               <p className="text-[var(--text-secondary)] max-w-sm mx-auto">
-                Set up your Canvas connection and sync your assignments to get started.
+                Set up your Canvas connection and sync your assignments, or add a task manually to get started.
               </p>
-              <Link
-                href="/setup"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium text-sm hover:bg-[var(--primary-hover)] transition-colors"
-              >
-                <Settings className="w-4 h-4" />
-                Setup Canvas
-              </Link>
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <Link
+                  href="/setup"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white font-medium text-sm hover:bg-[var(--primary-hover)] transition-colors"
+                >
+                  <Settings className="w-4 h-4" />
+                  Setup Canvas
+                </Link>
+
+                <div className="w-full sm:w-auto sm:min-w-[360px] max-w-lg flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={quickTitle}
+                    onChange={(e) => setQuickTitle(e.target.value)}
+                    onKeyDown={handleQuickTaskOnlyKeyDown}
+                    placeholder="Add a task... (Ctrl+Enter to edit)"
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)] placeholder:text-[var(--text-muted)]"
+                  />
+                  <button
+                    onClick={() => handleQuickAddTask()}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-sm hover:bg-[var(--bg-hover)] transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Task
+                  </button>
+                </div>
+              </div>
             </motion.div>
           ) : view === "calendar" ? (
             <CalendarView
@@ -475,134 +582,221 @@ export default function DashboardPage() {
               onPlayTask={startFocusTask}
             />
           ) : (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-            >
-              <div className="space-y-6">
-                {/* Task blocks */}
-                {data.blocks.map((block) => (
-                  <TaskBlockComponent
-                    key={block.id}
-                    block={block}
-                    tasks={blockTasks[block.id] || []}
-                    tags={data.tags}
-                    courseColors={courseColors}
-                    onPlayBlock={() => startFocusBlock(block.id)}
-                    onToggleComplete={completeTask}
-                    onPlayTask={startFocusTask}
-                    onUpdateTask={updateTask}
-                    onUpdateBlock={(updates) => updateBlock(block.id, updates)}
-                    onDeleteBlock={() => deleteBlock(block.id)}
-                    onAddTag={addTagToTask}
-                    onRemoveTag={removeTagFromTask}
-                    onEditTask={(taskId) => setEditingTaskId(taskId)}
-                  />
-                ))}
-
-                {/* New block button */}
-                {!showNewBlock ? (
+            <>
+              {/* Quick-add bar */}
+              <div className="flex items-center gap-2 mb-6">
+                <input
+                  type="text"
+                  value={quickTitle}
+                  onChange={(e) => setQuickTitle(e.target.value)}
+                  onKeyDown={handleQuickKeyDown}
+                  placeholder="Add a task... (Ctrl+Enter to edit, Shift+Enter for block)"
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)] placeholder:text-[var(--text-muted)]"
+                />
+                <div className="relative" ref={addDropdownRef}>
                   <button
-                    onClick={() => setShowNewBlock(true)}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border-2 border-dashed border-[var(--border)] text-sm text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
+                    onClick={() => {
+                      if (quickTitle.trim()) {
+                        handleQuickAddTask();
+                      } else {
+                        setShowAddDropdown((s) => !s);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-sm hover:bg-[var(--bg-hover)] transition-colors"
+                    title="Add task or block"
                   >
                     <Plus className="w-4 h-4" />
-                    New Block
+                    <ChevronDown className="w-3 h-3 text-[var(--text-muted)]" />
                   </button>
-                ) : (
-                  <div className="flex items-center gap-2 p-3 rounded-2xl border-2 border-dashed border-[var(--primary)] bg-[var(--primary-light)]">
-                    <input
-                      type="text"
-                      value={newBlockName}
-                      onChange={(e) => setNewBlockName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleCreateBlock();
-                        if (e.key === "Escape") setShowNewBlock(false);
-                      }}
-                      placeholder="Block name..."
-                      className="flex-1 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                      autoFocus
-                    />
-                    <button
-                      onClick={handleCreateBlock}
-                      className="px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-sm font-medium hover:bg-[var(--primary-hover)]"
-                    >
-                      Create
-                    </button>
-                    <button
-                      onClick={() => setShowNewBlock(false)}
-                      className="px-3 py-2 rounded-lg text-sm hover:bg-[var(--bg-hover)]"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                )}
-
-                {/* Unblocked tasks */}
-                <DroppableUnblocked>
-                  {data.blocks.length > 0 && unblockedTasks.length > 0 && (
-                    <h3 className="text-sm font-semibold text-[var(--text-secondary)] px-1 mb-2">
-                      Unsorted Tasks
-                    </h3>
+                  {showAddDropdown && (
+                    <div className="absolute right-0 top-full mt-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl shadow-lg z-10 w-44 py-1">
+                      <button
+                        onClick={handleQuickAddTask}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--bg-hover)] transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        New Task
+                        <kbd className="ml-auto text-[10px] text-[var(--text-muted)]">Enter</kbd>
+                      </button>
+                      <button
+                        onClick={handleQuickAddBlock}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--bg-hover)] transition-colors"
+                      >
+                        <Layers className="w-3.5 h-3.5" />
+                        New Block
+                        <kbd className="ml-auto text-[10px] text-[var(--text-muted)]">⇧Enter</kbd>
+                      </button>
+                    </div>
                   )}
-                  {unblockedTasks.length > 0 ? (
-                    <SortableContext items={unblockedTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-                      <div className="space-y-2">
-                        {unblockedTasks.map((task) => (
-                          <SortableTaskCard key={task.id} task={task}>
-                            <TaskCard
-                              task={task}
-                              tags={data.tags}
-                              courseColor={
-                                task.courseId
-                                  ? courseColors[task.courseId]
-                                  : undefined
-                              }
-                              onToggleComplete={() => completeTask(task.id)}
-                              onPlay={() => startFocusTask(task.id)}
-                              onUpdate={(updates) =>
-                                updateTask(task.id, updates)
-                              }
-                              onAddTag={(tagId) => addTagToTask(task.id, tagId)}
-                              onRemoveTag={(tagId) =>
-                                removeTagFromTask(task.id, tagId)
-                              }
-                              onEdit={() => setEditingTaskId(task.id)}
-                            />
-                          </SortableTaskCard>
-                        ))}
-                      </div>
-                    </SortableContext>
-                  ) : data.blocks.length > 0 ? (
-                    <p className="text-xs text-[var(--text-muted)] text-center py-2">
-                      Drop tasks here to unsort them
-                    </p>
-                  ) : null}
-                </DroppableUnblocked>
+                </div>
               </div>
 
-              <DragOverlay>
-                {draggedId ? (
-                  <div className="drag-overlay">
-                    <TaskCard
-                      task={data.tasks.find((t) => t.id === draggedId)!}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+              >
+                <div className="space-y-6">
+                  {/* Task blocks */}
+                  {data.blocks.map((block) => (
+                    <TaskBlockComponent
+                      key={block.id}
+                      block={block}
+                      tasks={blockTasks[block.id] || []}
                       tags={data.tags}
-                      onToggleComplete={() => {}}
-                      onPlay={() => {}}
-                      onUpdate={() => {}}
-                      onAddTag={() => {}}
-                      onRemoveTag={() => {}}
-                      isDragging
+                      courseColors={courseColors}
+                      onPlayBlock={() => startFocusBlock(block.id)}
+                      onToggleComplete={completeTask}
+                      onPlayTask={startFocusTask}
+                      onUpdateTask={updateTask}
+                      onUpdateBlock={(updates) => updateBlock(block.id, updates)}
+                      onDeleteBlock={() => deleteBlock(block.id)}
+                      onAddTag={addTagToTask}
+                      onRemoveTag={removeTagFromTask}
+                      onEditTask={(taskId) => setEditingTaskId(taskId)}
+                      onDeleteTask={(taskId) => deleteTask(taskId)}
+                      selectedTaskIds={selectedTaskIds}
+                      onSelectTask={handleTaskSelect}
                     />
-                  </div>
-                ) : null}
-              </DragOverlay>
-            </DndContext>
+                  ))}
+
+                  {/* New block button */}
+                  <button
+                    onClick={() => {
+                      const name = `Block ${data.blocks.length + 1}`;
+                      createBlock(name, BLOCK_COLORS[data.blocks.length % BLOCK_COLORS.length]);
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border-2 border-dashed border-[var(--border)] text-sm text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
+                  >
+                    <Layers className="w-4 h-4" />
+                    New Block
+                  </button>
+
+                  {/* Unblocked tasks */}
+                  <DroppableUnblocked>
+                    {data.blocks.length > 0 && unblockedTasks.length > 0 && (
+                      <h3 className="text-sm font-semibold text-[var(--text-secondary)] px-1 mb-2">
+                        Unsorted Tasks
+                      </h3>
+                    )}
+                    {unblockedTasks.length > 0 ? (
+                      <SortableContext items={unblockedTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                        <div className="space-y-2">
+                          {unblockedTasks.map((task) => (
+                            <SortableTaskCard key={task.id} task={task}>
+                              <TaskCard
+                                task={task}
+                                tags={data.tags}
+                                courseColor={
+                                  task.courseId
+                                    ? courseColors[task.courseId]
+                                    : undefined
+                                }
+                                onToggleComplete={() => completeTask(task.id)}
+                                onPlay={() => startFocusTask(task.id)}
+                                onUpdate={(updates) => updateTask(task.id, updates)}
+                                onAddTag={(tagId) => addTagToTask(task.id, tagId)}
+                                onRemoveTag={(tagId) => removeTagFromTask(task.id, tagId)}
+                                onEdit={() => setEditingTaskId(task.id)}
+                                onDelete={() => deleteTask(task.id)}
+                                isSelected={selectedTaskIds.has(task.id)}
+                                onSelect={(e) => handleTaskSelect(task.id, e)}
+                              />
+                            </SortableTaskCard>
+                          ))}
+                        </div>
+                      </SortableContext>
+                    ) : data.blocks.length > 0 ? (
+                      <p className="text-xs text-[var(--text-muted)] text-center py-2">
+                        Drop tasks here to unsort them
+                      </p>
+                    ) : null}
+                  </DroppableUnblocked>
+                </div>
+
+                <DragOverlay>
+                  {draggedId ? (
+                    <div className="drag-overlay">
+                      <TaskCard
+                        task={data.tasks.find((t) => t.id === draggedId)!}
+                        tags={data.tags}
+                        onToggleComplete={() => {}}
+                        onPlay={() => {}}
+                        onUpdate={() => {}}
+                        onAddTag={() => {}}
+                        onRemoveTag={() => {}}
+                        isDragging
+                      />
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
+            </>
           )}
         </div>
       </div>
+
+      {/* Bulk edit panel — fixed in left margin when tasks are selected */}
+      <AnimatePresence>
+        {selectedTaskIds.size > 0 && (
+          <motion.div
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -16 }}
+            className="fixed left-4 top-1/2 -translate-y-1/2 z-50 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-2xl p-3 flex flex-col gap-2 w-44"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-semibold text-[var(--text-secondary)]">
+                {selectedTaskIds.size} selected
+              </span>
+              <button
+                onClick={clearSelection}
+                className="p-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-muted)]"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <button
+              onClick={bulkComplete}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--bg-hover)] transition-colors w-full text-left"
+            >
+              <CheckCircle2 className="w-4 h-4 text-[var(--success)]" />
+              Complete all
+            </button>
+
+            <button
+              onClick={bulkDelete}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-red-50 text-[var(--danger)] transition-colors w-full text-left"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete all
+            </button>
+
+            <div className="border-t border-[var(--border)] pt-2 mt-1">
+              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5 px-1">Set priority</p>
+              <div className="flex flex-col gap-1">
+                {([null, "low", "medium", "high", "urgent"] as StudyTask["priority"][]).map((p) => (
+                  <button
+                    key={String(p)}
+                    onClick={() => bulkSetPriority(p)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs hover:bg-[var(--bg-hover)] transition-colors text-left"
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: p === null ? "#cbd5e1" : p === "low" ? "#94a3b8" : p === "medium" ? "#f59e0b" : p === "high" ? "#f97316" : "#ef4444",
+                      }}
+                    />
+                    {p === null ? "None" : p.charAt(0).toUpperCase() + p.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Task edit modal */}
       <AnimatePresence>
@@ -620,18 +814,18 @@ export default function DashboardPage() {
               onAddTag={(tagId) => addTagToTask(editingTaskId, tagId)}
               onRemoveTag={(tagId) => removeTagFromTask(editingTaskId, tagId)}
               onCreateTag={createTag}
-                onClose={() => {
-                  if (creatingTaskId === editingTaskId) setCreatingTaskId(null);
-                  setEditingTaskId(null);
-                }}
-                onDelete={
-                  creatingTaskId === editingTaskId
-                    ? undefined
-                    : () => {
-                        deleteTask(editingTaskId);
-                        setEditingTaskId(null);
-                      }
-                }
+              onClose={() => {
+                if (creatingTaskId === editingTaskId) setCreatingTaskId(null);
+                setEditingTaskId(null);
+              }}
+              onDelete={
+                creatingTaskId === editingTaskId
+                  ? undefined
+                  : () => {
+                      deleteTask(editingTaskId);
+                      setEditingTaskId(null);
+                    }
+              }
             />
           );
         })()}
@@ -646,7 +840,6 @@ export default function DashboardPage() {
             defaultTimerMinutes={data.settings.defaultTimerMinutes}
             extraTimeMinutes={data.settings.extraTimeMinutes}
             onComplete={(taskId) => {
-              // clear saved remaining time then mark complete
               updateTask(taskId, { secondsRemaining: 0 });
               completeTask(taskId);
             }}

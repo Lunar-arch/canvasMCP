@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { StudyTask, Tag, Course } from "@/types";
 import { motion } from "motion/react";
 import {
@@ -18,6 +18,7 @@ import { TAG_COLORS } from "@/lib/colors";
 import { cn } from "@/lib/cn";
 
 const PRIORITY_OPTIONS = [
+  { value: null, label: "None", color: "#94a3b8" },
   { value: "low", label: "Low", color: "#94a3b8" },
   { value: "medium", label: "Medium", color: "#f59e0b" },
   { value: "high", label: "High", color: "#f97316" },
@@ -57,7 +58,7 @@ export function TaskEditModal({
   const [estimatedMinutes, setEstimatedMinutes] = useState(
     task.estimatedMinutes
   );
-  const [priority, setPriority] = useState(task.priority);
+  const [priority, setPriority] = useState<StudyTask["priority"]>(task.priority);
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState(TAG_COLORS[0]);
   const [showNewTag, setShowNewTag] = useState(false);
@@ -72,7 +73,7 @@ export function TaskEditModal({
   const taskTags = tags.filter((t) => task.tags.includes(t.id));
   const availableTags = tags.filter((t) => !task.tags.includes(t.id));
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     onUpdate({
       title: title.trim() || task.title,
       description: description.trim() || undefined,
@@ -86,7 +87,30 @@ export function TaskEditModal({
           : courses.find((c) => c.id === selectedCourseId)?.name,
     });
     onClose();
-  };
+  }, [
+    onUpdate,
+    title,
+    task.title,
+    description,
+    dueAt,
+    estimatedMinutes,
+    priority,
+    selectedCourseId,
+    courses,
+    onClose,
+  ]);
+
+  useEffect(() => {
+    const onWindowKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+
+    window.addEventListener("keydown", onWindowKeyDown);
+    return () => window.removeEventListener("keydown", onWindowKeyDown);
+  }, [handleSave]);
 
   const handleCreateTag = () => {
     if (newTagName.trim()) {
@@ -106,7 +130,7 @@ export function TaskEditModal({
       onClick={onClose}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/40" />
 
       {/* Modal */}
       <motion.div
@@ -204,7 +228,7 @@ export function TaskEditModal({
             <div className="flex gap-2">
               {PRIORITY_OPTIONS.map((p) => (
                 <button
-                  key={p.value}
+                  key={String(p.value)}
                   type="button"
                   onClick={() => setPriority(p.value)}
                   className={cn(

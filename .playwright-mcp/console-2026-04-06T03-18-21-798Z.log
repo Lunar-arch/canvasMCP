@@ -1,0 +1,17 @@
+[     192ms] [WARNING] Error with Permissions-Policy header: Unrecognized feature: 'battery'. @ :0
+[     550ms] [WARNING] Error with Permissions-Policy header: Unrecognized feature: 'battery'. @ :0
+[     608ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://aisd-tx.us001-rapididentity.com/api/rest/authn/custom-style.css.gz:0
+[     865ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://aisd-tx.us001-rapididentity.com/api/rest/authn/krb:0
+[     945ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://aisd-tx.us001-rapididentity.com/api/rest/authn:0
+[   32818ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fcustom-style.css.gz:0
+[   33167ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fkrb:0
+[   33342ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn:0
+[  266005ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fcustom-style.css.gz:0
+[  266479ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fkrb:0
+[  266650ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn:0
+[  324215ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fcustom-style.css.gz:0
+[  324598ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fkrb:0
+[  324731ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn:0
+[  334061ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fkrb:0
+[  335529ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Fproxy%3F__debug%3D1%26url%3Dhttps%253A%252F%252Faisd-tx.us001-rapididentity.com%252Fapi%252Frest%252Fauthn:0
+[  346729ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fkrb:0

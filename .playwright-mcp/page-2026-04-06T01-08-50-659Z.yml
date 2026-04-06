@@ -1,0 +1,179 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - link "Dashboard" [ref=e6] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e7]
+          - text: Dashboard
+        - generic [ref=e9]:
+          - paragraph [ref=e10]: Macros
+          - button "Allen Portal Test canvas" [ref=e64]:
+            - generic [ref=e67]: Allen Portal Test
+            - generic [ref=e69]: canvas
+          - button "New Macro" [ref=e13]:
+            - img [ref=e14]
+            - text: New Macro
+        - button "Settings" [ref=e16]:
+          - img [ref=e17]
+          - text: Settings
+    - main [ref=e20]:
+      - generic [ref=e70]:
+        - generic [ref=e71]:
+          - generic [ref=e72]:
+            - button "Allen Portal Test" [ref=e74]
+            - generic [ref=e75]:
+              - generic [ref=e76]: canvas
+              - button "Enabled" [ref=e77]:
+                - img [ref=e78]
+              - button [ref=e81]:
+                - img [ref=e82]
+          - generic [ref=e85]:
+            - button "Steps" [ref=e86]:
+              - img [ref=e87]
+              - text: Steps
+            - button "Record" [ref=e88]:
+              - img [ref=e89]
+              - text: Record
+            - button "Mappings" [ref=e92]:
+              - img [ref=e93]
+              - text: Mappings
+            - button "Schedule" [ref=e95]:
+              - img [ref=e96]
+              - text: Schedule
+            - button "Credentials" [ref=e98]:
+              - img [ref=e99]
+              - text: Credentials
+            - button "Run" [ref=e103]:
+              - img [ref=e104]
+              - text: Run
+        - generic [ref=e107]:
+          - generic [ref=e108]:
+            - paragraph [ref=e109]:
+              - text: 5 steps · Use
+              - code [ref=e110]: "{{key}}"
+              - text: to reference credentials.
+            - button "Record" [ref=e111]:
+              - img [ref=e112]
+              - text: Record
+          - generic [ref=e115]:
+            - generic [ref=e116]:
+              - generic [ref=e117]:
+                - button [ref=e118]:
+                  - img [ref=e119]
+                - generic [ref=e126]: "1"
+              - generic [ref=e127]:
+                - generic [ref=e128]:
+                  - generic [ref=e129]:
+                    - img [ref=e130]
+                    - combobox [ref=e133] [cursor=pointer]:
+                      - option "Navigate" [selected]
+                      - option "Fill Input"
+                      - option "Click"
+                      - option "Press Key"
+                      - option "Wait"
+                      - option "New Tab"
+                      - option "Switch Tab"
+                  - textbox "Step label" [ref=e134]: Go to login portal
+                  - button [ref=e135]:
+                    - img [ref=e136]
+                - 'textbox "URL (use {{portalUrl}} for credentials)" [ref=e140]': "{{portalUrl}}"
+            - generic [ref=e141]:
+              - generic [ref=e142]:
+                - button [ref=e143]:
+                  - img [ref=e144]
+                - generic [ref=e151]: "2"
+              - generic [ref=e152]:
+                - generic [ref=e153]:
+                  - generic [ref=e154]:
+                    - img [ref=e155]
+                    - combobox [ref=e157] [cursor=pointer]:
+                      - option "Navigate"
+                      - option "Fill Input" [selected]
+                      - option "Click"
+                      - option "Press Key"
+                      - option "Wait"
+                      - option "New Tab"
+                      - option "Switch Tab"
+                  - textbox "Step label" [ref=e158]: Enter username
+                  - button [ref=e159]:
+                    - img [ref=e160]
+                - generic [ref=e163]:
+                  - 'textbox "CSS selector (e.g. #username)" [ref=e164]': "#username"
+                  - 'textbox "Value (use {{username}}, {{password}}, etc.)" [ref=e165]': "{{username}}"
+            - generic [ref=e166]:
+              - generic [ref=e167]:
+                - button [ref=e168]:
+                  - img [ref=e169]
+                - generic [ref=e176]: "3"
+              - generic [ref=e177]:
+                - generic [ref=e178]:
+                  - generic [ref=e179]:
+                    - img [ref=e180]
+                    - combobox [ref=e182] [cursor=pointer]:
+                      - option "Navigate"
+                      - option "Fill Input" [selected]
+                      - option "Click"
+                      - option "Press Key"
+                      - option "Wait"
+                      - option "New Tab"
+                      - option "Switch Tab"
+                  - textbox "Step label" [ref=e183]: Enter password
+                  - button [ref=e184]:
+                    - img [ref=e185]
+                - generic [ref=e188]:
+                  - 'textbox "CSS selector (e.g. #username)" [ref=e189]': "#password"
+                  - 'textbox "Value (use {{username}}, {{password}}, etc.)" [ref=e190]': "{{password}}"
+            - generic [ref=e191]:
+              - generic [ref=e192]:
+                - button [ref=e193]:
+                  - img [ref=e194]
+                - generic [ref=e201]: "4"
+              - generic [ref=e202]:
+                - generic [ref=e203]:
+                  - generic [ref=e204]:
+                    - img [ref=e205]
+                    - combobox [ref=e208] [cursor=pointer]:
+                      - option "Navigate"
+                      - option "Fill Input"
+                      - option "Click" [selected]
+                      - option "Press Key"
+                      - option "Wait"
+                      - option "New Tab"
+                      - option "Switch Tab"
+                  - textbox "Step label" [ref=e209]: Click login button
+                  - button [ref=e210]:
+                    - img [ref=e211]
+                - 'textbox "CSS selector (e.g. #username)" [ref=e215]': button[type='submit']
+            - generic [ref=e216]:
+              - generic [ref=e217]:
+                - button [ref=e218]:
+                  - img [ref=e219]
+                - generic [ref=e226]: "5"
+              - generic [ref=e227]:
+                - generic [ref=e228]:
+                  - generic [ref=e229]:
+                    - img [ref=e230]
+                    - combobox [ref=e233] [cursor=pointer]:
+                      - option "Navigate"
+                      - option "Fill Input"
+                      - option "Click"
+                      - option "Press Key"
+                      - option "Wait" [selected]
+                      - option "New Tab"
+                      - option "Switch Tab"
+                  - textbox "Step label" [ref=e234]: Wait for page to load
+                  - button [ref=e235]:
+                    - img [ref=e236]
+                - combobox [ref=e241]:
+                  - option "Wait for URL"
+                  - option "Wait for Element"
+                  - option "Wait for Page Load" [selected]
+                  - option "Wait (fixed time)"
+          - status [ref=e242]
+          - button "Add Step" [ref=e243]:
+            - img [ref=e244]
+            - text: Add Step
+  - button "Open Next.js Dev Tools" [ref=e33] [cursor=pointer]:
+    - img [ref=e34]
+  - alert [ref=e37]

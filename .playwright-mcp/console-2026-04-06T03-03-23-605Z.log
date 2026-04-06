@@ -1,0 +1,4 @@
+[    1151ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fkrb:0
+[    6785ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "new-password"): (More info: https://goo.gl/9p2vKq) %o @ http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org%2Flogin#/authn:0
+[   18077ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/favicon.ico:0
+[   19848ms] e

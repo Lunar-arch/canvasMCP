@@ -242,6 +242,14 @@ async function runMacro(
   password: string,
   portalUrl: string
 ) {
+  // Backstop: if the macro has no explicit navigate step, open the portal first.
+  if (!steps.some((step) => step.action === "navigate")) {
+    await session.activePage().goto(portalUrl, {
+      waitUntil: "networkidle",
+      timeout: 30000,
+    });
+  }
+
   for (const step of steps) {
     const page = session.activePage();
 

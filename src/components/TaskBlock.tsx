@@ -4,7 +4,7 @@ import { useState } from "react";
 import { TaskBlock as TaskBlockType, StudyTask, Tag } from "@/types";
 import { TaskCard } from "./TaskCard";
 import { cn } from "@/lib/cn";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   Play,
   MoreHorizontal,
@@ -12,6 +12,8 @@ import {
   Trash2,
   X,
   Check,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import {
   useDroppable,
@@ -54,6 +56,9 @@ interface TaskBlockProps {
   onAddTag: (taskId: string, tagId: string) => void;
   onRemoveTag: (taskId: string, tagId: string) => void;
   onEditTask?: (taskId: string) => void;
+  onDeleteTask?: (taskId: string) => void;
+  selectedTaskIds?: Set<string>;
+  onSelectTask?: (taskId: string, e: React.MouseEvent) => void;
 }
 
 export function TaskBlockComponent({
@@ -70,10 +75,14 @@ export function TaskBlockComponent({
   onAddTag,
   onRemoveTag,
   onEditTask,
+  onDeleteTask,
+  selectedTaskIds,
+  onSelectTask,
 }: TaskBlockProps) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(block.name);
   const [showMenu, setShowMenu] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   const { setNodeRef, isOver } = useDroppable({ id: `block-${block.id}` });
 
@@ -103,6 +112,18 @@ export function TaskBlockComponent({
       {/* Block header */}
       <div className="flex items-center justify-between p-5 pb-3">
         <div className="flex items-center gap-3">
+          {/* Collapse toggle */}
+          <button
+            onClick={() => setCollapsed((c) => !c)}
+            className="p-0.5 rounded hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-muted)]"
+            title={collapsed ? "Expand" : "Collapse"}
+          >
+            {collapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+          </button>
           <div
             className="w-3 h-3 rounded-full shrink-0"
             style={{ backgroundColor: block.color }}
@@ -196,32 +217,48 @@ export function TaskBlockComponent({
       </div>
 
       {/* Tasks */}
-      <div className="px-4 pb-4 pt-1">
-        {tasks.length === 0 && (
-          <p className="text-xs text-[var(--text-muted)] text-center py-4">
-            Drag tasks here
-          </p>
+      <AnimatePresence initial={false}>
+        {!collapsed && (
+          <motion.div
+            key="tasks"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pb-4 pt-1">
+              {tasks.length === 0 && (
+                <p className="text-xs text-[var(--text-muted)] text-center py-4">
+                  Drag tasks here
+                </p>
+              )}
+              <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-2">
+                  {tasks.map((task) => (
+                    <SortableTaskItem key={task.id} task={task}>
+                      <TaskCard
+                        task={task}
+                        tags={tags}
+                        courseColor={task.courseId ? courseColors[task.courseId] : undefined}
+                        onToggleComplete={() => onToggleComplete(task.id)}
+                        onPlay={() => onPlayTask(task.id)}
+                        onUpdate={(updates) => onUpdateTask(task.id, updates)}
+                        onAddTag={(tagId) => onAddTag(task.id, tagId)}
+                        onRemoveTag={(tagId) => onRemoveTag(task.id, tagId)}
+                        onEdit={onEditTask ? () => onEditTask(task.id) : undefined}
+                        onDelete={onDeleteTask ? () => onDeleteTask(task.id) : undefined}
+                        isSelected={selectedTaskIds?.has(task.id)}
+                        onSelect={onSelectTask ? (e) => onSelectTask(task.id, e) : undefined}
+                      />
+                    </SortableTaskItem>
+                  ))}
+                </div>
+              </SortableContext>
+            </div>
+          </motion.div>
         )}
-        <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-          <div className="space-y-2">
-            {tasks.map((task) => (
-              <SortableTaskItem key={task.id} task={task}>
-                <TaskCard
-                  task={task}
-                  tags={tags}
-                  courseColor={task.courseId ? courseColors[task.courseId] : undefined}
-                  onToggleComplete={() => onToggleComplete(task.id)}
-                  onPlay={() => onPlayTask(task.id)}
-                  onUpdate={(updates) => onUpdateTask(task.id, updates)}
-                  onAddTag={(tagId) => onAddTag(task.id, tagId)}
-                  onRemoveTag={(tagId) => onRemoveTag(task.id, tagId)}
-                  onEdit={onEditTask ? () => onEditTask(task.id) : undefined}
-                />
-              </SortableTaskItem>
-            ))}
-          </div>
-        </SortableContext>
-      </div>
+      </AnimatePresence>
     </motion.div>
   );
 }

@@ -1,0 +1,73 @@
+[2026-04-06T01:26:27.932Z] [page-attached] {
+  "page": "p1",
+  "url": "about:blank"
+}
+[2026-04-06T01:26:27.934Z] [session-start] {
+  "startUrl": "http://localhost:3000/setup",
+  "headless": true,
+  "autoStopSeconds": 6,
+  "cwd": "C:\\Users\\Nathan\\Git\\canvasMCP",
+  "node": "v24.13.1",
+  "platform": "win32"
+}
+[2026-04-06T01:26:27.940Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "document",
+  "url": "http://localhost:3000/setup"
+}
+[2026-04-06T01:26:28.015Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "document",
+  "url": "http://localhost:3000/setup",
+  "headers": {
+    "content-type": "text/html; charset=utf-8"
+  }
+}
+[2026-04-06T01:26:28.018Z] [frame-navigated] {
+  "page": "p1",
+  "isMainFrame": true,
+  "name": "",
+  "url": "http://localhost:3000/setup"
+}
+[2026-04-06T01:26:28.138Z] [navigated] {
+  "page": "p1",
+  "url": "http://localhost:3000/setup",
+  "title": "StudyFlow — Canvas Study Tool"
+}
+[2026-04-06T01:26:29.833Z] [console] {
+  "page": "p1",
+  "type": "info",
+  "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+  "location": {
+    "url": "webpack-internal:///(app-pages-browser)/./node_modules/.pnpm/next@16.2.1_@babel+core@7.2_362c6897e98f78157a7f59905ed20b55/node_modules/next/dist/next-devtools/shared/forward-logs-shared.js",
+    "lineNumber": 27,
+    "columnNumber": 27
+  }
+}
+[2026-04-06T01:26:29.959Z] [iframe-state] {
+  "page": "p1",
+  "iframes": []
+}
+[2026-04-06T01:26:30.040Z] [frame-navigated] {
+  "page": "p1",
+  "isMainFrame": true,
+  "name": "",
+  "url": "http://localhost:3000/setup"
+}
+[2026-04-06T01:26:34.243Z] [screenshot] {
+  "path": "C:\\Users\\Nathan\\Git\\canvasMCP\\debug-logs\\proxy-session-2026-04-06T01-26-27-693Z.png"
+}
+[2026-04-06T01:26:34.245Z] [session-summary] [
+  {
+    "page": "p1",
+    "url": "http://localhost:3000/setup",
+    "title": "StudyFlow — Canvas Study Tool"
+  }
+]
+[2026-04-06T01:26:34.245Z] [session-end] {
+  "reason": "auto-stop",
+  "logFile": "C:\\Users\\Nathan\\Git\\canvasMCP\\debug-logs\\proxy-session-2026-04-06T01-26-27-693Z.txt"
+}

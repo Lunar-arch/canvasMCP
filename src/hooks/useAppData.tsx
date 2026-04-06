@@ -19,8 +19,9 @@ import {
   CanvasConfig,
   FilterState,
   AppSettings,
+  Macro,
 } from "@/types";
-import { loadData, saveData } from "@/lib/storage";
+import { getDefaultData, loadData, saveData } from "@/lib/storage";
 import { COURSE_COLORS } from "@/lib/colors";
 
 interface AppContextType {
@@ -28,6 +29,10 @@ interface AppContextType {
   isLoaded: boolean;
   // Config
   saveConfig: (config: CanvasConfig) => void;
+  // Macros
+  createMacro: (input: Partial<Macro>) => Macro;
+  updateMacro: (id: string, updates: Partial<Macro>) => void;
+  deleteMacro: (id: string) => void;
   // Sync
   syncFromCanvas: (courses: Course[], assignments: Assignment[]) => void;
   // Tasks
@@ -55,7 +60,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<AppData>(loadData());
+  const [data, setData] = useState<AppData>(() => getDefaultData());
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -74,6 +79,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveConfig = useCallback(
     (config: CanvasConfig) => {
       persist((d) => ({ ...d, config }));
+    },
+    [persist]
+  );
+
+  const createMacro = useCallback(
+    (input: Partial<Macro>): Macro => {
+      const macro: Macro = {
+        id: uuid(),
+        name: input.name || "New Macro",
+        description: input.description,
+        sourceType: input.sourceType || "generic",
+        schoolName: input.schoolName,
+        steps: input.steps || [],
+        fieldMappings: input.fieldMappings || [],
+        schedule: input.schedule || { type: "manual" },
+        credentials: input.credentials || [],
+        enabled: input.enabled ?? true,
+        lastRun: input.lastRun,
+        lastRunStatus: input.lastRunStatus,
+      };
+      persist((d) => ({ ...d, macros: [...(d.macros || []), macro] }));
+      return macro;
+    },
+    [persist]
+  );
+
+  const updateMacro = useCallback(
+    (id: string, updates: Partial<Macro>) => {
+      persist((d) => ({
+        ...d,
+        macros: (d.macros || []).map((m) => (m.id === id ? { ...m, ...updates } : m)),
+      }));
+    },
+    [persist]
+  );
+
+  const deleteMacro = useCallback(
+    (id: string) => {
+      persist((d) => ({ ...d, macros: (d.macros || []).filter((m) => m.id !== id) }));
     },
     [persist]
   );
@@ -110,10 +154,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
             htmlUrl: a.html_url,
             completed: existing?.completed || false,
             estimatedMinutes: existing?.estimatedMinutes || 25,
+            elapsedMinutes: existing?.elapsedMinutes || 0,
             priority: existing?.priority || "medium",
             tags: existing?.tags || [],
             blockId: existing?.blockId,
             order: existing?.order ?? i,
+            taskType: existing?.taskType || "timed",
+            sessions: existing?.sessions || [],
+            fileLinks: existing?.fileLinks || [],
+            links: existing?.links || [],
+            taskLinks: existing?.taskLinks || [],
           };
           });
 
@@ -143,13 +193,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         htmlUrl: input.htmlUrl,
         completed: input.completed ?? false,
         estimatedMinutes: input.estimatedMinutes ?? 25,
-        priority: input.priority ?? "medium",
+        elapsedMinutes: input.elapsedMinutes ?? 0,
+        priority: input.priority !== undefined ? input.priority : null,
         tags: input.tags ?? [],
         blockId: input.blockId,
         order:
           input.order ??
           (data.tasks.filter((t) => t.blockId === input.blockId).length ?? 0),
         custom: true,
+        taskType: input.taskType ?? "completion",
+        sessions: input.sessions ?? [],
+        remind: input.remind,
+        fileLinks: input.fileLinks ?? [],
+        links: input.links ?? [],
+        taskLinks: input.taskLinks ?? [],
       };
       persist((d) => ({ ...d, tasks: [...d.tasks, task] }));
       return task;
@@ -330,6 +387,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         data,
         isLoaded,
         saveConfig,
+        createMacro,
+        updateMacro,
+        deleteMacro,
         syncFromCanvas,
         createTask,
         updateTask,

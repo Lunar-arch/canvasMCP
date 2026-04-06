@@ -38,7 +38,7 @@ export function useFilteredTasks(
 
       if (
         filters.priorities.length > 0 &&
-        !filters.priorities.includes(task.priority)
+        (task.priority === null || !filters.priorities.includes(task.priority))
       )
         return false;
 

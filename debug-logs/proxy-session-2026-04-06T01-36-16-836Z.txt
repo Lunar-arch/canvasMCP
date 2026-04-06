@@ -1,0 +1,531 @@
+[2026-04-06T01:36:17.391Z] [page-attached] {
+  "page": "p1",
+  "url": "about:blank"
+}
+[2026-04-06T01:36:17.394Z] [session-start] {
+  "startUrl": "http://localhost:3000/setup",
+  "headless": false,
+  "autoStopSeconds": 0,
+  "cwd": "C:\\Users\\Nathan\\Git\\canvasMCP",
+  "node": "v24.13.1",
+  "platform": "win32"
+}
+[2026-04-06T01:36:17.411Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "document",
+  "url": "http://localhost:3000/setup"
+}
+[2026-04-06T01:36:18.053Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "document",
+  "url": "http://localhost:3000/setup",
+  "headers": {
+    "content-type": "text/html; charset=utf-8"
+  }
+}
+[2026-04-06T01:36:18.059Z] [frame-navigated] {
+  "page": "p1",
+  "isMainFrame": true,
+  "name": "",
+  "url": "http://localhost:3000/setup"
+}
+[2026-04-06T01:36:18.280Z] [page-error] {
+  "page": "p1",
+  "message": "Invalid or unexpected token"
+}
+[2026-04-06T01:36:18.337Z] [navigated] {
+  "page": "p1",
+  "url": "http://localhost:3000/setup",
+  "title": "StudyFlow — Canvas Study Tool"
+}
+[2026-04-06T01:36:19.870Z] [console] {
+  "page": "p1",
+  "type": "info",
+  "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+  "location": {
+    "url": "webpack-internal:///(app-pages-browser)/./node_modules/.pnpm/next@16.2.1_@babel+core@7.2_362c6897e98f78157a7f59905ed20b55/node_modules/next/dist/next-devtools/shared/forward-logs-shared.js",
+    "lineNumber": 27,
+    "columnNumber": 27
+  }
+}
+[2026-04-06T01:36:19.988Z] [iframe-state] {
+  "page": "p1",
+  "iframes": []
+}
+[2026-04-06T01:36:20.032Z] [console] {
+  "page": "p1",
+  "type": "error",
+  "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+  "location": {
+    "url": "http://localhost:3000/favicon.ico",
+    "lineNumber": 0,
+    "columnNumber": 0
+  }
+}
+[2026-04-06T01:36:30.759Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "document",
+  "url": "http://localhost:3000/"
+}
+[2026-04-06T01:36:32.247Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "document",
+  "url": "http://localhost:3000/",
+  "headers": {
+    "content-type": "text/html; charset=utf-8"
+  }
+}
+[2026-04-06T01:36:32.258Z] [console] {
+  "page": "p1",
+  "type": "warning",
+  "text": "[Fast Refresh] performing full reload\n\nFast Refresh will perform a full reload when you edit a file that's imported by modules outside of the React rendering tree.\nYou might have a file which exports a React component but also exports a value that is imported by a non-React component file.\nConsider migrating the non-React component export to a separate file and importing it into both files.\n\nIt is also possible the parent component of the component you edited is a class component, which disables Fast Refresh.\nFast Refresh requires at least one parent function component in your React tree.",
+  "location": {
+    "url": "webpack-internal:///(app-pages-browser)/./node_modules/.pnpm/next@16.2.1_@babel+core@7.2_362c6897e98f78157a7f59905ed20b55/node_modules/next/dist/next-devtools/shared/forward-logs-shared.js",
+    "lineNumber": 27,
+    "columnNumber": 27
+  }
+}
+[2026-04-06T01:36:32.261Z] [iframe-state-error] Error: page.evaluate: Execution context was destroyed, most likely because of a navigation
+[2026-04-06T01:36:32.262Z] [frame-navigated] {
+  "page": "p1",
+  "isMainFrame": true,
+  "name": "",
+  "url": "http://localhost:3000/"
+}
+[2026-04-06T01:36:33.209Z] [console] {
+  "page": "p1",
+  "type": "info",
+  "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+  "location": {
+    "url": "webpack-internal:///(app-pages-browser)/./node_modules/.pnpm/next@16.2.1_@babel+core@7.2_362c6897e98f78157a7f59905ed20b55/node_modules/next/dist/next-devtools/shared/forward-logs-shared.js",
+    "lineNumber": 27,
+    "columnNumber": 27
+  }
+}
+[2026-04-06T01:36:33.358Z] [frame-navigated] {
+  "page": "p1",
+  "isMainFrame": true,
+  "name": "",
+  "url": "http://localhost:3000/"
+}
+[2026-04-06T01:36:35.945Z] [frame-navigated] {
+  "page": "p1",
+  "isMainFrame": true,
+  "name": "",
+  "url": "http://localhost:3000/setup"
+}
+[2026-04-06T01:36:51.254Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "document",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org"
+}
+[2026-04-06T01:36:51.538Z] [iframe-state] {
+  "page": "p1",
+  "iframes": [
+    {
+      "index": 0,
+      "titleAttr": "Recording browser",
+      "srcAttr": "/api/proxy?url=https%3A%2F%2Fportal.allenisd.org",
+      "srcProp": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org",
+      "sameOrigin": true,
+      "href": "about:blank",
+      "origin": "null",
+      "docTitle": "",
+      "bodyPreview": ""
+    }
+  ]
+}
+[2026-04-06T01:36:52.213Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "document",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org",
+  "headers": {
+    "content-type": "text/html; charset=utf-8",
+    "x-proxy-redirect-count": "0",
+    "x-proxy-url": "https://portal.allenisd.org"
+  }
+}
+[2026-04-06T01:36:52.215Z] [frame-navigated] {
+  "page": "p1",
+  "isMainFrame": false,
+  "name": "",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org"
+}
+[2026-04-06T01:36:52.215Z] [console] {
+  "page": "p1",
+  "type": "warning",
+  "text": "An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.",
+  "location": {
+    "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org",
+    "lineNumber": 0,
+    "columnNumber": 0
+  }
+}
+[2026-04-06T01:36:52.217Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "script",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org%2Fassets%2Fjs%2FredirectToLogin.js"
+}
+[2026-04-06T01:36:52.287Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "script",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org%2Fassets%2Fjs%2FredirectToLogin.js",
+  "headers": {
+    "x-proxy-redirect-count": "0",
+    "x-proxy-url": "https://portal.allenisd.org/assets/js/redirectToLogin.js",
+    "content-type": "application/javascript"
+  }
+}
+[2026-04-06T01:36:52.289Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "document",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org%2Flogin"
+}
+[2026-04-06T01:36:52.679Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "document",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org%2Flogin",
+  "headers": {
+    "content-type": "text/html; charset=utf-8",
+    "x-proxy-redirect-count": "2",
+    "x-proxy-url": "https://aisd-tx.us001-rapididentity.com/idp/AuthnEngine"
+  }
+}
+[2026-04-06T01:36:52.682Z] [frame-navigated] {
+  "page": "p1",
+  "isMainFrame": false,
+  "name": "",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org%2Flogin"
+}
+[2026-04-06T01:36:52.682Z] [console] {
+  "page": "p1",
+  "type": "warning",
+  "text": "An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.",
+  "location": {
+    "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org%2Flogin",
+    "lineNumber": 0,
+    "columnNumber": 0
+  }
+}
+[2026-04-06T01:36:52.690Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "stylesheet",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fvendor-d41d8cd98f00b204e9800998ecf8427e.css.gz"
+}
+[2026-04-06T01:36:52.690Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "stylesheet",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fidauto-idp-ui-058de3aa7f498ea1867d108ba20819ec.css.gz"
+}
+[2026-04-06T01:36:52.690Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "stylesheet",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fcustom-style.css.gz"
+}
+[2026-04-06T01:36:52.690Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "script",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fscripts%2Fccpapi-38696dfedbb3361f2a01f0c76aed1f6c.js"
+}
+[2026-04-06T01:36:52.690Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "script",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fscripts%2Fuseragent-b6a197a6e7bab464e620c8b12df4b26f.js"
+}
+[2026-04-06T01:36:52.690Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "script",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fvendor-ca682b744ad9886c9e4299ec9178c9ef.js.gz"
+}
+[2026-04-06T01:36:52.690Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "script",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fidauto-idp-ui-a866f68fd5996172c8ad7db5aab9c289.js.gz"
+}
+[2026-04-06T01:36:52.770Z] [response] {
+  "page": "p1",
+  "status": 403,
+  "method": "GET",
+  "resourceType": "stylesheet",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fcustom-style.css.gz",
+  "headers": {
+    "x-proxy-redirect-count": "0",
+    "x-proxy-url": "https://aisd-tx.us001-rapididentity.com/api/rest/authn/custom-style.css.gz",
+    "content-type": "text/html; charset=utf-8"
+  }
+}
+[2026-04-06T01:36:52.770Z] [console] {
+  "page": "p1",
+  "type": "error",
+  "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+  "location": {
+    "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fcustom-style.css.gz",
+    "lineNumber": 0,
+    "columnNumber": 0
+  }
+}
+[2026-04-06T01:36:52.771Z] [request-failed] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "stylesheet",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fcustom-style.css.gz",
+  "error": "net::ERR_ABORTED"
+}
+[2026-04-06T01:36:52.801Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "stylesheet",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fvendor-d41d8cd98f00b204e9800998ecf8427e.css.gz",
+  "headers": {
+    "x-proxy-redirect-count": "0",
+    "x-proxy-url": "https://assets.identitymgmt.net/rapididentity/2026.03.0-43980/idp/assets/vendor-d41d8cd98f00b204e9800998ecf8427e.css.gz",
+    "content-type": "text/css"
+  }
+}
+[2026-04-06T01:36:52.819Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "script",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fscripts%2Fccpapi-38696dfedbb3361f2a01f0c76aed1f6c.js",
+  "headers": {
+    "x-proxy-redirect-count": "0",
+    "x-proxy-url": "https://assets.identitymgmt.net/rapididentity/2026.03.0-43980/idp/assets/scripts/ccpapi-38696dfedbb3361f2a01f0c76aed1f6c.js",
+    "content-type": "application/javascript"
+  }
+}
+[2026-04-06T01:36:52.826Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "script",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fscripts%2Fuseragent-b6a197a6e7bab464e620c8b12df4b26f.js",
+  "headers": {
+    "x-proxy-redirect-count": "0",
+    "x-proxy-url": "https://assets.identitymgmt.net/rapididentity/2026.03.0-43980/idp/assets/scripts/useragent-b6a197a6e7bab464e620c8b12df4b26f.js",
+    "content-type": "application/javascript"
+  }
+}
+[2026-04-06T01:36:52.842Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "stylesheet",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fidauto-idp-ui-058de3aa7f498ea1867d108ba20819ec.css.gz",
+  "headers": {
+    "x-proxy-redirect-count": "0",
+    "x-proxy-url": "https://assets.identitymgmt.net/rapididentity/2026.03.0-43980/idp/assets/idauto-idp-ui-058de3aa7f498ea1867d108ba20819ec.css.gz",
+    "content-type": "text/css"
+  }
+}
+[2026-04-06T01:36:52.899Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "script",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fidauto-idp-ui-a866f68fd5996172c8ad7db5aab9c289.js.gz",
+  "headers": {
+    "x-proxy-redirect-count": "0",
+    "x-proxy-url": "https://assets.identitymgmt.net/rapididentity/2026.03.0-43980/idp/assets/idauto-idp-ui-a866f68fd5996172c8ad7db5aab9c289.js.gz",
+    "content-type": "application/javascript"
+  }
+}
+[2026-04-06T01:36:53.030Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "script",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fvendor-ca682b744ad9886c9e4299ec9178c9ef.js.gz",
+  "headers": {
+    "x-proxy-redirect-count": "0",
+    "x-proxy-url": "https://assets.identitymgmt.net/rapididentity/2026.03.0-43980/idp/assets/vendor-ca682b744ad9886c9e4299ec9178c9ef.js.gz",
+    "content-type": "application/javascript"
+  }
+}
+[2026-04-06T01:36:53.130Z] [iframe-state] {
+  "page": "p1",
+  "iframes": [
+    {
+      "index": 0,
+      "titleAttr": "Recording browser",
+      "srcAttr": "/api/proxy?url=https%3A%2F%2Fportal.allenisd.org",
+      "srcProp": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org",
+      "sameOrigin": true,
+      "href": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org%2Flogin",
+      "origin": "http://localhost:3000",
+      "docTitle": "Allen ISD | Where Eagles Soar!",
+      "bodyPreview": ""
+    }
+  ]
+}
+[2026-04-06T01:36:53.154Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "xhr",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2FresourceBundles%2Fbulk%3Fbundle%3Dnet.idauto.idp.authn_ui%26bundle%3Dnet.idauto.arms.ui.AccountManagementModule%26bundle%3Dnet.idauto.core.ui.ApplicationUIBase"
+}
+[2026-04-06T01:36:53.155Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "stylesheet",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DRoboto%2BCondensed%3A400%2C700%2C300%26subset%3Dlatin"
+}
+[2026-04-06T01:36:53.216Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "xhr",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2FresourceBundles%2Fbulk%3Fbundle%3Dnet.idauto.idp.authn_ui%26bundle%3Dnet.idauto.arms.ui.AccountManagementModule%26bundle%3Dnet.idauto.core.ui.ApplicationUIBase",
+  "headers": {
+    "x-proxy-redirect-count": "0",
+    "x-proxy-url": "https://aisd-tx.us001-rapididentity.com/api/rest/resourceBundles/bulk?bundle=net.idauto.idp.authn_ui&bundle=net.idauto.arms.ui.AccountManagementModule&bundle=net.idauto.core.ui.ApplicationUIBase",
+    "content-type": "application/json"
+  }
+}
+[2026-04-06T01:36:53.242Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "xhr",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fkrb"
+}
+[2026-04-06T01:36:53.289Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "stylesheet",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DRoboto%2BCondensed%3A400%2C700%2C300%26subset%3Dlatin",
+  "headers": {
+    "x-proxy-redirect-count": "0",
+    "x-proxy-url": "https://fonts.googleapis.com/css?family=Roboto+Condensed:400,700,300&subset=latin",
+    "content-type": "text/css; charset=utf-8"
+  }
+}
+[2026-04-06T01:36:53.294Z] [response] {
+  "page": "p1",
+  "status": 403,
+  "method": "GET",
+  "resourceType": "xhr",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fkrb",
+  "headers": {
+    "x-proxy-redirect-count": "0",
+    "x-proxy-url": "https://aisd-tx.us001-rapididentity.com/api/rest/authn/krb",
+    "content-type": "text/html; charset=utf-8"
+  }
+}
+[2026-04-06T01:36:53.294Z] [console] {
+  "page": "p1",
+  "type": "error",
+  "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+  "location": {
+    "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn%2Fkrb",
+    "lineNumber": 0,
+    "columnNumber": 0
+  }
+}
+[2026-04-06T01:36:53.328Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "xhr",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn"
+}
+[2026-04-06T01:36:53.385Z] [response] {
+  "page": "p1",
+  "status": 403,
+  "method": "GET",
+  "resourceType": "xhr",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn",
+  "headers": {
+    "x-proxy-redirect-count": "0",
+    "x-proxy-url": "https://aisd-tx.us001-rapididentity.com/api/rest/authn",
+    "content-type": "text/html; charset=utf-8"
+  }
+}
+[2026-04-06T01:36:53.385Z] [console] {
+  "page": "p1",
+  "type": "error",
+  "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+  "location": {
+    "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Faisd-tx.us001-rapididentity.com%2Fapi%2Frest%2Fauthn",
+    "lineNumber": 0,
+    "columnNumber": 0
+  }
+}
+[2026-04-06T01:36:53.391Z] [frame-navigated] {
+  "page": "p1",
+  "isMainFrame": false,
+  "name": "",
+  "url": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org%2Flogin#/error"
+}
+[2026-04-06T01:36:53.408Z] [request] {
+  "page": "p1",
+  "method": "GET",
+  "resourceType": "image",
+  "url": "https://assets.identitymgmt.net/logos/rapididentity/IA_Logo_Cube_Float.svg"
+}
+[2026-04-06T01:36:53.469Z] [response] {
+  "page": "p1",
+  "status": 200,
+  "method": "GET",
+  "resourceType": "image",
+  "url": "https://assets.identitymgmt.net/logos/rapididentity/IA_Logo_Cube_Float.svg",
+  "headers": {
+    "content-type": "image/svg+xml"
+  }
+}
+[2026-04-06T01:36:54.552Z] [iframe-state] {
+  "page": "p1",
+  "iframes": [
+    {
+      "index": 0,
+      "titleAttr": "Recording browser",
+      "srcAttr": "/api/proxy?url=https%3A%2F%2Fportal.allenisd.org",
+      "srcProp": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org",
+      "sameOrigin": true,
+      "href": "http://localhost:3000/api/proxy?url=https%3A%2F%2Fportal.allenisd.org%2Flogin#/error",
+      "origin": "http://localhost:3000",
+      "docTitle": "Allen ISD | Where Eagles Soar!",
+      "bodyPreview": "RapidIdentity\nLogin\n\nAn error has occurred while loading the page. Please try again later."
+    }
+  ]
+}
+[2026-04-06T01:37:06.603Z] [iframe-state] {
+  "page": "p1",
+  "iframes": []
+}
+[2026-04-06T01:37:10.486Z] [screenshot] {
+  "path": "C:\\Users\\Nathan\\Git\\canvasMCP\\debug-logs\\proxy-session-2026-04-06T01-36-16-836Z.png"
+}
+[2026-04-06T01:37:10.490Z] [session-summary] [
+  {
+    "page": "p1",
+    "url": "http://localhost:3000/setup",
+    "title": "StudyFlow — Canvas Study Tool"
+  }
+]
+[2026-04-06T01:37:10.490Z] [session-end] {
+  "reason": "manual-stop",
+  "logFile": "C:\\Users\\Nathan\\Git\\canvasMCP\\debug-logs\\proxy-session-2026-04-06T01-36-16-836Z.txt"
+}

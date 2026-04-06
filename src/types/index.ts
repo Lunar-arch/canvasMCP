@@ -2,7 +2,7 @@ export type WaitType = "duration" | "url" | "selector" | "navigation";
 
 export interface MacroStep {
   id: string;
-  action: "click" | "fill" | "navigate" | "wait" | "press";
+  action: "click" | "fill" | "navigate" | "wait" | "press" | "newTab" | "switchTab";
   selector?: string;
   value?: string;
   url?: string;
@@ -11,7 +11,47 @@ export interface MacroStep {
   waitType?: WaitType;
   waitUrl?: string;
   waitSelector?: string;
+  tabUrl?: string;
   label: string;
+}
+
+export interface FieldMapping {
+  id: string;
+  selector: string;
+  attribute: "textContent" | "href" | "value" | "innerHTML" | "src";
+  taskField: "title" | "description" | "dueAt" | "htmlUrl" | "courseName" | "estimatedMinutes" | "custom";
+  customFieldName?: string;
+  transform?: string;
+  isRepeating: boolean;
+}
+
+export interface MacroSchedule {
+  type: "manual" | "immediate" | "hourly" | "daily" | "weekly";
+  time?: string;
+  dayOfWeek?: number;
+}
+
+export interface MacroCredential {
+  id: string;
+  key: string;
+  value: string;
+  label: string;
+  isSecret: boolean;
+}
+
+export interface Macro {
+  id: string;
+  name: string;
+  description?: string;
+  sourceType: "canvas" | "generic";
+  schoolName?: string;
+  steps: MacroStep[];
+  fieldMappings: FieldMapping[];
+  schedule: MacroSchedule;
+  credentials: MacroCredential[];
+  enabled: boolean;
+  lastRun?: string;
+  lastRunStatus?: "success" | "error";
 }
 
 export interface CanvasConfig {
@@ -51,6 +91,22 @@ export interface Tag {
   color: string;
 }
 
+export interface FocusSession {
+  startTime: string; // ISO date string
+  endTime: string;   // ISO date string
+}
+
+export interface FileLink {
+  name: string;
+  url: string;
+  type?: string;
+}
+
+export interface UrlLink {
+  label?: string;
+  url: string;
+}
+
 export interface StudyTask {
   id: string;
   assignmentId?: number;
@@ -63,12 +119,22 @@ export interface StudyTask {
   htmlUrl?: string;
   completed: boolean;
   estimatedMinutes: number;
-  priority: "low" | "medium" | "high" | "urgent";
+  elapsedMinutes: number;
+  priority: "low" | "medium" | "high" | "urgent" | null;
   tags: string[];
   blockId?: string;
   order: number;
   custom?: boolean;
   secondsRemaining?: number;
+  taskType: "completion" | "timed" | "practice";
+  sessions: FocusSession[];
+  remind?: {
+    onDay?: string;       // ISO date string — reminder on a specific day
+    timeBefore?: string;  // cron expression — e.g. "0 9 * * 1"
+  };
+  fileLinks: FileLink[];
+  links: UrlLink[];
+  taskLinks: string[]; // IDs of linked StudyTasks
 }
 
 export interface TaskBlock {
@@ -80,6 +146,7 @@ export interface TaskBlock {
 
 export interface AppData {
   config: CanvasConfig | null;
+  macros: Macro[];
   courses: Course[];
   assignments: Assignment[];
   tasks: StudyTask[];

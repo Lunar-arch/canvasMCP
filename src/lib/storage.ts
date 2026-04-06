@@ -2,33 +2,47 @@ import { AppData, AppSettings } from "@/types";
 
 const STORAGE_KEY = "canvas-study-data";
 
-const defaultSettings: AppSettings = {
-  defaultTimerMinutes: 25,
-  extraTimeMinutes: 5,
-  theme: "light",
-  excludedCourseIds: [],
-  notion: {},
-};
+function createDefaultSettings(): AppSettings {
+  return {
+    defaultTimerMinutes: 25,
+    extraTimeMinutes: 5,
+    theme: "light",
+    excludedCourseIds: [],
+    notion: {},
+  };
+}
 
-const defaultData: AppData = {
-  config: null,
-  courses: [],
-  assignments: [],
-  tasks: [],
-  blocks: [],
-  tags: [],
-  settings: defaultSettings,
-  lastSynced: null,
-};
+export function getDefaultData(): AppData {
+  return {
+    config: null,
+    macros: [],
+    courses: [],
+    assignments: [],
+    tasks: [],
+    blocks: [],
+    tags: [],
+    settings: createDefaultSettings(),
+    lastSynced: null,
+  };
+}
 
 export function loadData(): AppData {
-  if (typeof window === "undefined") return defaultData;
+  const defaults = getDefaultData();
+  if (typeof window === "undefined") return defaults;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultData;
-    return { ...defaultData, ...JSON.parse(raw) };
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw) as Partial<AppData>;
+    return {
+      ...defaults,
+      ...parsed,
+      settings: {
+        ...defaults.settings,
+        ...(parsed.settings ?? {}),
+      },
+    };
   } catch {
-    return defaultData;
+    return defaults;
   }
 }
 
