@@ -3,6 +3,39 @@ import { MacroStep } from "@/types";
 
 export const maxDuration = 300;
 
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+const IS_VERCEL_ENV = process.env.VERCEL === "1" || process.env.VERCEL === "true";
+const ENABLE_PLAYWRIGHT_FALLBACK =
+  process.env.ENABLE_PLAYWRIGHT_FALLBACK === "1" ||
+  process.env.ENABLE_PLAYWRIGHT_FALLBACK === "true";
+
+function getRemoteBrowserWSEndpoint(): string | null {
+  const candidates = [
+    process.env.BROWSER_WS_ENDPOINT,
+    process.env.BROWSERLESS_WS_ENDPOINT,
+    process.env.PUPPETEER_WS_ENDPOINT,
+  ];
+
+  for (const candidate of candidates) {
+    const value = (candidate || "").trim();
+    if (value) return value;
+  }
+
+  return null;
+}
+
+function withCors(response: Response): Response {
+  Object.entries(CORS_HEADERS).forEach(([key, value]) => {
+    response.headers.set(key, value);
+  });
+  return response;
+}
+
 // Unified browser abstraction so puppeteer and playwright share the same macro runner
 interface BrowserPage {
   goto(url: string, opts?: { waitUntil?: string; timeout?: number }): Promise<void>;
@@ -153,16 +186,21 @@ async function launchPuppeteer(): Promise<BrowserSession> {
   const StealthPlugin = (await import("puppeteer-extra-plugin-stealth")).default;
   puppeteerExtra.use(StealthPlugin());
 
-  const browser = await puppeteerExtra.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-blink-features=AutomationControlled",
-      "--window-size=1920,1080",
-    ],
-    defaultViewport: { width: 1920, height: 1080 },
-  });
+  const remoteWSEndpoint = getRemoteBrowserWSEndpoint();
+  const browser = remoteWSEndpoint
+    ? await puppeteerExtra.connect({ browserWSEndpoint: remoteWSEndpoint })
+    : await puppeteerExtra.launch({
+        headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-blink-features=AutomationControlled",
+          "--window-size=1920,1080",
+          ...(IS_VERCEL_ENV ? ["--disable-dev-shm-usage"] : []),
+        ],
+        defaultViewport: { width: 1920, height: 1080 },
+      });
 
   const allPages: BrowserPage[] = [];
   let active: BrowserPage;
@@ -288,7 +326,7 @@ async function launchPuppeteer(): Promise<BrowserSession> {
 // ---------- Playwright fallback ----------
 async function launchPlaywright(): Promise<BrowserSession> {
   const { chromium } = await import("playwright");
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     userAgent:
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -745,8 +783,28 @@ async function executeCanvasRun(
     emitLog(emit, "Launching browser automation...");
     try {
       session = await launchPuppeteer();
-      console.log("[canvas-sync] Using puppeteer-stealth");
+      console.log(
+        `[canvas-sync] Using puppeteer-stealth${getRemoteBrowserWSEndpoint() ? " (remote endpoint)" : ""}`
+      );
     } catch (puppeteerErr) {
+      if (IS_VERCEL_ENV) {
+        throw createRouteError(
+          "Puppeteer launch failed on Vercel. Set BROWSER_WS_ENDPOINT (or BROWSERLESS_WS_ENDPOINT / PUPPETEER_WS_ENDPOINT) to a remote Chromium service.",
+          500,
+          debugSteps,
+          puppeteerErr instanceof Error ? puppeteerErr.message : String(puppeteerErr)
+        );
+      }
+
+      if (!ENABLE_PLAYWRIGHT_FALLBACK) {
+        throw createRouteError(
+          "Puppeteer launch failed and Playwright fallback is disabled. Install Puppeteer browser binaries and set PUPPETEER_EXECUTABLE_PATH if needed, or enable Playwright fallback with ENABLE_PLAYWRIGHT_FALLBACK=1.",
+          500,
+          debugSteps,
+          puppeteerErr instanceof Error ? puppeteerErr.message : String(puppeteerErr)
+        );
+      }
+
       console.warn("[canvas-sync] Puppeteer failed, falling back to Playwright:", puppeteerErr);
       session = await launchPlaywright();
       console.log("[canvas-sync] Using playwright fallback");
@@ -940,12 +998,18 @@ async function executeCanvasRun(
 }
 
 // ---------- API route ----------
+export function OPTIONS() {
+  return withCors(new NextResponse(null, { status: 204 }));
+}
+
 export async function POST(req: NextRequest) {
   let body: Partial<CanvasRunInput>;
   try {
     body = (await req.json()) as Partial<CanvasRunInput>;
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    return withCors(
+      NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
+    );
   }
 
   const { username, password, portalUrl, schoolName, macroSteps } = body;
@@ -956,9 +1020,14 @@ export async function POST(req: NextRequest) {
     !schoolName ||
     !Array.isArray(macroSteps)
   ) {
-    return NextResponse.json(
-      { error: "Missing required fields: username, password, portalUrl, schoolName, macroSteps" },
-      { status: 400 }
+    return withCors(
+      NextResponse.json(
+        {
+          error:
+            "Missing required fields: username, password, portalUrl, schoolName, macroSteps",
+        },
+        { status: 400 }
+      )
     );
   }
 
@@ -996,18 +1065,18 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return new Response(stream, {
+    return withCors(new Response(stream, {
       headers: {
         "Content-Type": "application/x-ndjson; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
       },
-    });
+    }));
   }
 
   try {
     const payload = await executeCanvasRun(input);
-    return NextResponse.json(payload);
+    return withCors(NextResponse.json(payload));
   } catch (error) {
     const routeError = toRouteError(error);
     const response: Record<string, unknown> = {
@@ -1015,6 +1084,8 @@ export async function POST(req: NextRequest) {
       debugSteps: routeError.debugSteps || [],
     };
     if (routeError.raw) response.raw = routeError.raw;
-    return NextResponse.json(response, { status: routeError.status || 500 });
+    return withCors(
+      NextResponse.json(response, { status: routeError.status || 500 })
+    );
   }
 }

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>StudyFlow Iframe Embed Boilerplate</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", Arial, sans-serif;
+        background: #f4f7ff;
+        color: #0f172a;
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+
+      .bar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: end;
+        padding: 12px;
+        border-bottom: 1px solid #dbe4f5;
+        background: #fff;
+      }
+
+      label {
+        display: grid;
+        gap: 4px;
+        font-size: 12px;
+        color: #475569;
+      }
+
+      input,
+      select,
+      button {
+        font: inherit;
+      }
+
+      input,
+      select {
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 8px 10px;
+      }
+
+      button {
+        border: 1px solid #0284c7;
+        border-radius: 8px;
+        background: #0ea5e9;
+        color: #fff;
+        padding: 9px 12px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      iframe {
+        width: 100%;
+        height: calc(100vh - 68px);
+        border: 0;
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <label>
+        StudyFlow Server Origin
+        <input id="origin" type="text" value="https://your-studyflow-server.example.com" />
+      </label>
+
+      <label>
+        Target Screen
+        <select id="target">
+          <option value="/">Home</option>
+          <option value="/dashboard">Dashboard</option>
+          <option value="/setup">Setup</option>
+        </select>
+      </label>
+
+      <button id="load" type="button">Load StudyFlow</button>
+    </div>
+
+    <iframe id="studyflow-frame" title="StudyFlow"></iframe>
+
+    <script>
+      (function () {
+        const originInput = document.getElementById("origin");
+        const targetSelect = document.getElementById("target");
+        const loadButton = document.getElementById("load");
+        const frame = document.getElementById("studyflow-frame");
+
+        function normalizeOrigin(value) {
+          return String(value || "").trim().replace(/\/+$/, "");
+        }
+
+        function loadFrame() {
+          const origin = normalizeOrigin(originInput.value);
+          const target = targetSelect.value || "/";
+          frame.src = origin + "/html?target=" + encodeURIComponent(target);
+        }
+
+        loadButton.addEventListener("click", loadFrame);
+      })();
+    </script>
+  </body>
+</html>
