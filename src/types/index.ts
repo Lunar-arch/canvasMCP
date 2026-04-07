@@ -1,8 +1,16 @@
 export type WaitType = "duration" | "url" | "selector" | "navigation";
+export type MacroIfConditionType =
+  | "always"
+  | "urlIncludes"
+  | "urlMatches"
+  | "elementExists"
+  | "elementNotExists"
+  | "elementTextContains"
+  | "elementTextEquals";
 
 export interface MacroStep {
   id: string;
-  action: "click" | "fill" | "navigate" | "wait" | "press" | "newTab" | "switchTab";
+  action: "click" | "fill" | "navigate" | "wait" | "press" | "newTab" | "switchTab" | "if";
   selector?: string;
   value?: string;
   url?: string;
@@ -12,6 +20,11 @@ export interface MacroStep {
   waitUrl?: string;
   waitSelector?: string;
   tabUrl?: string;
+  parentIfId?: string;
+  ifConditionType?: MacroIfConditionType;
+  ifTarget?: string;
+  ifValue?: string;
+  ifCaseSensitive?: boolean;
   label: string;
 }
 
@@ -60,6 +73,15 @@ export interface CanvasConfig {
   portalUrl: string;
   schoolName: string;
   macroSteps: MacroStep[];
+  syncOptions?: CanvasSyncOptions;
+}
+
+export interface CanvasSyncOptions {
+  trackedCourseIds?: number[];
+  onlyAddFromDate?: string | null;
+  excludeNoDueDateTasks?: boolean;
+  reviewNoDueDateTasks?: boolean;
+  approvedNoDueAssignmentIds?: number[];
 }
 
 export interface Course {
@@ -162,6 +184,10 @@ export interface AppSettings {
   extraTimeMinutes: number;
   theme: "light" | "dark";
   excludedCourseIds?: number[];
+  canvasTrackedCourseIds?: number[];
+  canvasOnlyAddFromDate?: string | null;
+  canvasSkipNoDueDateTasks?: boolean;
+  canvasReviewNoDueDateTasks?: boolean;
   notion?: {
     accessToken?: string;
     refreshToken?: string;

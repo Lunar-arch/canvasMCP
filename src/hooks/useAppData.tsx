@@ -17,6 +17,7 @@ import {
   Course,
   Assignment,
   CanvasConfig,
+  CanvasSyncOptions,
   FilterState,
   AppSettings,
   Macro,
@@ -34,7 +35,11 @@ interface AppContextType {
   updateMacro: (id: string, updates: Partial<Macro>) => void;
   deleteMacro: (id: string) => void;
   // Sync
-  syncFromCanvas: (courses: Course[], assignments: Assignment[]) => void;
+  syncFromCanvas: (
+    courses: Course[],
+    assignments: Assignment[],
+    options?: CanvasSyncOptions
+  ) => void;
   // Tasks
   createTask: (input: Partial<StudyTask>) => StudyTask;
   updateTask: (id: string, updates: Partial<StudyTask>) => void;
@@ -123,12 +128,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const syncFromCanvas = useCallback(
-    (courses: Course[], assignments: Assignment[]) => {
+    (courses: Course[], assignments: Assignment[], options?: CanvasSyncOptions) => {
       persist((d) => {
         const coloredCourses = courses.map((c, i) => ({
           ...c,
           color: COURSE_COLORS[i % COURSE_COLORS.length],
         }));
+
+        const trackedCourseIds =
+          options?.trackedCourseIds && options.trackedCourseIds.length > 0
+            ? options.trackedCourseIds
+            : d.settings?.canvasTrackedCourseIds && d.settings.canvasTrackedCourseIds.length > 0
+              ? d.settings.canvasTrackedCourseIds
+              : coloredCourses.map((c) => c.id);
+
+        const excluded = coloredCourses
+          .map((c) => c.id)
+          .filter((id) => !trackedCourseIds.includes(id));
+
+        const trackedAssignments = assignments.filter((a) =>
+          trackedCourseIds.includes(a.course_id)
+        );
 
         const existingTaskMap = new Map(
           d.tasks
@@ -136,42 +156,83 @@ export function AppProvider({ children }: { children: ReactNode }) {
             .map((t) => [t.assignmentId!, t])
         );
 
-        const excluded = d.settings?.excludedCourseIds || [];
+        const onlyAddFromDate = options?.onlyAddFromDate
+          ? new Date(options.onlyAddFromDate)
+          : null;
+        const onlyAddFromMs =
+          onlyAddFromDate && !Number.isNaN(onlyAddFromDate.getTime())
+            ? onlyAddFromDate.getTime()
+            : null;
+        const excludeNoDueDateTasks = options?.excludeNoDueDateTasks ?? false;
+        const reviewNoDueDateTasks = options?.reviewNoDueDateTasks ?? false;
+        const approvedNoDueIds = new Set(options?.approvedNoDueAssignmentIds || []);
 
-        const tasks: StudyTask[] = assignments
-          .filter((a) => !excluded.includes(a.course_id))
+        const importedTasks: StudyTask[] = trackedAssignments
+          .filter((a) => {
+            const existing = existingTaskMap.get(a.id);
+            if (existing) return true;
+
+            const dueMs = a.due_at ? new Date(a.due_at).getTime() : null;
+            if (onlyAddFromMs !== null && dueMs !== null && dueMs < onlyAddFromMs) {
+              return false;
+            }
+
+            if (!a.due_at) {
+              if (excludeNoDueDateTasks) return false;
+              if (reviewNoDueDateTasks && !approvedNoDueIds.has(a.id)) return false;
+            }
+
+            return true;
+          })
           .map((a, i) => {
-          const existing = existingTaskMap.get(a.id);
-          const course = coloredCourses.find((c) => c.id === a.course_id);
-          return {
-            id: existing?.id || uuid(),
-            assignmentId: a.id,
-            courseId: a.course_id,
-            title: a.name,
-            courseName: course?.name || a.course_name || "Unknown Course",
-            dueAt: a.due_at,
-            pointsPossible: a.points_possible,
-            htmlUrl: a.html_url,
-            completed: existing?.completed || false,
-            estimatedMinutes: existing?.estimatedMinutes || 25,
-            elapsedMinutes: existing?.elapsedMinutes || 0,
-            priority: existing?.priority || "medium",
-            tags: existing?.tags || [],
-            blockId: existing?.blockId,
-            order: existing?.order ?? i,
-            taskType: existing?.taskType || "timed",
-            sessions: existing?.sessions || [],
-            fileLinks: existing?.fileLinks || [],
-            links: existing?.links || [],
-            taskLinks: existing?.taskLinks || [],
-          };
+            const existing = existingTaskMap.get(a.id);
+            const course = coloredCourses.find((c) => c.id === a.course_id);
+            return {
+              id: existing?.id || uuid(),
+              assignmentId: a.id,
+              courseId: a.course_id,
+              title: a.name,
+              courseName: course?.name || a.course_name || "Unknown Course",
+              dueAt: a.due_at,
+              pointsPossible: a.points_possible,
+              htmlUrl: a.html_url,
+              completed: existing?.completed || false,
+              estimatedMinutes: existing?.estimatedMinutes ?? 0,
+              elapsedMinutes: existing?.elapsedMinutes || 0,
+              priority: existing?.priority || "medium",
+              tags: existing?.tags || [],
+              blockId: existing?.blockId,
+              order: existing?.order ?? i,
+              taskType: existing?.taskType || "timed",
+              sessions: existing?.sessions || [],
+              fileLinks: existing?.fileLinks || [],
+              links: existing?.links || [],
+              taskLinks: existing?.taskLinks || [],
+            };
           });
+
+        const customTasks = d.tasks.filter((t) => !t.assignmentId);
 
         return {
           ...d,
           courses: coloredCourses,
-          assignments,
-          tasks,
+          assignments: trackedAssignments,
+          tasks: [...customTasks, ...importedTasks],
+          settings: {
+            ...d.settings,
+            excludedCourseIds: excluded,
+            canvasTrackedCourseIds: trackedCourseIds,
+            canvasOnlyAddFromDate:
+              options?.onlyAddFromDate ?? d.settings.canvasOnlyAddFromDate ?? null,
+            canvasSkipNoDueDateTasks:
+              options?.excludeNoDueDateTasks ??
+              d.settings.canvasSkipNoDueDateTasks ??
+              false,
+            canvasReviewNoDueDateTasks:
+              options?.reviewNoDueDateTasks ??
+              d.settings.canvasReviewNoDueDateTasks ??
+              false,
+          },
           lastSynced: new Date().toISOString(),
         };
       });
@@ -192,7 +253,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pointsPossible: input.pointsPossible ?? null,
         htmlUrl: input.htmlUrl,
         completed: input.completed ?? false,
-        estimatedMinutes: input.estimatedMinutes ?? 25,
+        estimatedMinutes: input.estimatedMinutes ?? 0,
         elapsedMinutes: input.elapsedMinutes ?? 0,
         priority: input.priority !== undefined ? input.priority : null,
         tags: input.tags ?? [],

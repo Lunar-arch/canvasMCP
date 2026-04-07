@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { useAppData } from "@/hooks/useAppData";
 import { useFilteredTasks } from "@/hooks/useFilteredTasks";
-import { FilterState, StudyTask, ViewMode } from "@/types";
+import { CanvasSyncOptions, FilterState, StudyTask, ViewMode } from "@/types";
 import { TaskCard } from "@/components/TaskCard";
 import { TaskBlockComponent } from "@/components/TaskBlock";
 import { CalendarView } from "@/components/CalendarView";
@@ -23,6 +23,7 @@ import {
   Loader2,
   ArrowLeft,
   ChevronDown,
+  ChevronUp,
   Trash2,
   CheckCircle2,
   X,
@@ -31,6 +32,7 @@ import {
 import {
   DndContext,
   DragEndEvent,
+  DragOverEvent,
   DragOverlay,
   DragStartEvent,
   PointerSensor,
@@ -48,8 +50,19 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { BLOCK_COLORS } from "@/lib/colors";
 import Link from "next/link";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
-function SortableTaskCard({ task, children }: { task: StudyTask; children: React.ReactNode }) {
+function SortableTaskCard({
+  task,
+  children,
+  showStackPreview = false,
+  stackCount = 1,
+}: {
+  task: StudyTask;
+  children: React.ReactNode;
+  showStackPreview?: boolean;
+  stackCount?: number;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -59,8 +72,23 @@ function SortableTaskCard({ task, children }: { task: StudyTask; children: React
   } as React.CSSProperties;
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      {children}
+    <div ref={setNodeRef} style={style} className="relative" {...attributes} {...listeners}>
+      {showStackPreview && isDragging && stackCount > 1 && (
+        <>
+          <div className="absolute inset-0 translate-x-2 translate-y-2 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] opacity-75 pointer-events-none" />
+          {stackCount > 2 && (
+            <div className="absolute inset-0 translate-x-4 translate-y-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] opacity-50 pointer-events-none" />
+          )}
+        </>
+      )}
+      <div className="relative">
+        {children}
+        {showStackPreview && isDragging && stackCount > 1 && (
+          <div className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-[var(--primary)] text-white text-[10px] font-bold flex items-center justify-center shadow-sm z-10 pointer-events-none">
+            {stackCount}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -128,6 +156,7 @@ export default function DashboardPage() {
   const [focusIndex, setFocusIndex] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [multiDragIds, setMultiDragIds] = useState<Set<string> | null>(null);
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [creatingTaskId, setCreatingTaskId] = useState<string | null>(null);
@@ -142,10 +171,13 @@ export default function DashboardPage() {
   const [bulkDateValue, setBulkDateValue] = useState("");
   const [bulkDescription, setBulkDescription] = useState("");
   const [showBulkDatePicker, setShowBulkDatePicker] = useState(false);
+  const [bulkCourseValue, setBulkCourseValue] = useState("");
+  const [bulkMoveBlockValue, setBulkMoveBlockValue] = useState("");
 
   // Selection state
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+  const [bulkPanelCollapsed, setBulkPanelCollapsed] = useState(true);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -179,11 +211,61 @@ export default function DashboardPage() {
     return map;
   }, [data.blocks, filteredTasks]);
 
+  const activeDragTask = useMemo(
+    () => (draggedId ? data.tasks.find((t) => t.id === draggedId) || null : null),
+    [draggedId, data.tasks]
+  );
+
+  const blockDropPreview = useMemo(() => {
+    if (!activeDragTask || !dragOverId) return null;
+
+    let targetBlockId: string | undefined;
+    let insertIndex = 0;
+
+    if (dragOverId.startsWith("block-")) {
+      targetBlockId = dragOverId.replace("block-", "");
+      const destinationIds = (blockTasks[targetBlockId] || [])
+        .map((t) => t.id)
+        .filter((id) => id !== activeDragTask.id);
+      insertIndex = destinationIds.length;
+    } else {
+      const overTask = data.tasks.find((t) => t.id === dragOverId);
+      if (!overTask?.blockId) return null;
+      targetBlockId = overTask.blockId;
+      const destinationIds = (blockTasks[targetBlockId] || [])
+        .map((t) => t.id)
+        .filter((id) => id !== activeDragTask.id);
+      const overIndex = destinationIds.indexOf(dragOverId);
+      insertIndex = overIndex === -1 ? destinationIds.length : overIndex;
+    }
+
+    if (!targetBlockId || activeDragTask.blockId === targetBlockId) return null;
+
+    return {
+      blockId: targetBlockId,
+      index: insertIndex,
+      count: multiDragIds && multiDragIds.size > 1 ? multiDragIds.size : 1,
+    };
+  }, [activeDragTask, dragOverId, data.tasks, blockTasks, multiDragIds]);
+
   // All visible tasks in display order (blocks first, then unblocked)
   const allVisibleTasks = useMemo(() => {
     const fromBlocks = data.blocks.flatMap((b) => blockTasks[b.id] || []);
     return [...fromBlocks, ...unblockedTasks];
   }, [data.blocks, blockTasks, unblockedTasks]);
+
+  const bulkCourseOptions = useMemo(
+    () => data.courses.map((c) => ({ value: String(c.id), label: c.name, color: c.color })),
+    [data.courses]
+  );
+
+  const bulkBlockOptions = useMemo(
+    () => [
+      { value: "none", label: "Unsorted" },
+      ...data.blocks.map((b) => ({ value: b.id, label: b.name, color: b.color })),
+    ],
+    [data.blocks]
+  );
 
   // Focus mode handlers
   const startFocusAll = useCallback(() => {
@@ -228,7 +310,14 @@ export default function DashboardPage() {
       });
       const result = await res.json();
       if (res.ok) {
-        syncFromCanvas(result.courses, result.assignments);
+        const syncOptions: CanvasSyncOptions = data.config?.syncOptions || {
+          trackedCourseIds: data.settings.canvasTrackedCourseIds || [],
+          onlyAddFromDate: data.settings.canvasOnlyAddFromDate || null,
+          excludeNoDueDateTasks: data.settings.canvasSkipNoDueDateTasks || false,
+          reviewNoDueDateTasks: data.settings.canvasReviewNoDueDateTasks || false,
+          approvedNoDueAssignmentIds: [],
+        };
+        syncFromCanvas(result.courses, result.assignments, syncOptions);
       }
     } catch {
       // Silent fail
@@ -376,6 +465,7 @@ export default function DashboardPage() {
   const handleDragStart = (event: DragStartEvent) => {
     const activeId = event.active.id as string;
     setDraggedId(activeId);
+    setDragOverId(null);
     if (selectedTaskIds.has(activeId) && selectedTaskIds.size > 1) {
       setMultiDragIds(new Set(selectedTaskIds));
     } else {
@@ -383,8 +473,19 @@ export default function DashboardPage() {
     }
   };
 
+  const handleDragOver = (event: DragOverEvent) => {
+    setDragOverId(event.over ? String(event.over.id) : null);
+  };
+
+  const handleDragCancel = () => {
+    setDraggedId(null);
+    setDragOverId(null);
+    setMultiDragIds(null);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     setDraggedId(null);
+    setDragOverId(null);
     const { active, over } = event;
     if (!over) { setMultiDragIds(null); return; }
 
@@ -464,7 +565,7 @@ export default function DashboardPage() {
 
   const totalTime = filteredTasks
     .filter((t) => !t.completed)
-    .reduce((sum, t) => sum + t.estimatedMinutes, 0);
+    .reduce((sum, t) => sum + Math.max(0, t.estimatedMinutes || 0), 0);
   const completedCount = filteredTasks.filter((t) => t.completed).length;
 
   return (
@@ -473,8 +574,8 @@ export default function DashboardPage() {
         {/* Top bar */}
         <div className="sticky top-0 z-40 bg-[var(--bg)]/80 backdrop-blur-xl border-b border-[var(--border)]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center gap-4">
+            <div className="flex items-center justify-between h-16 gap-2">
+              <div className="flex items-center gap-2 sm:gap-4 shrink-0">
                 <Link
                   href="/"
                   className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)] transition-colors"
@@ -482,26 +583,26 @@ export default function DashboardPage() {
                   <ArrowLeft className="w-4 h-4" />
                 </Link>
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-[var(--primary)] flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-lg bg-[var(--primary)] flex items-center justify-center shrink-0">
                     <BookOpen className="w-4 h-4 text-white" />
                   </div>
-                  <h1 className="text-lg font-bold">StudyFlow</h1>
+                  <h1 className="hidden sm:block text-lg font-bold">StudyFlow</h1>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 sm:gap-3 min-w-0">
                 {totalRemainingSeconds > 0 && (
-                  <span className="text-xs text-[var(--text-secondary)] mr-2">
-                    Remaining {formatSeconds(totalRemainingSeconds)}
+                  <span className="hidden md:inline text-xs text-[var(--text-secondary)]">
+                    {formatSeconds(totalRemainingSeconds)} left
                   </span>
                 )}
                 <button
                   onClick={startFocusAll}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--primary)] text-white text-sm font-medium hover:bg-[var(--primary-hover)] transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 rounded-xl bg-[var(--primary)] text-white text-sm font-medium hover:bg-[var(--primary-hover)] transition-colors shrink-0"
                   title="Focus on all tasks"
                 >
                   <Play className="w-4 h-4" />
-                  Focus
+                  <span className="hidden sm:inline">Focus</span>
                 </button>
 
                 {/* Filter */}
@@ -514,30 +615,30 @@ export default function DashboardPage() {
                 />
 
                 {/* View toggle */}
-                <div className="flex items-center bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-1">
+                <div className="flex items-center bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-1 shrink-0">
                   <button
                     onClick={() => setView("tasks")}
                     className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                      "flex items-center gap-1.5 px-2.5 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors",
                       view === "tasks"
                         ? "bg-[var(--primary)] text-white"
                         : "hover:bg-[var(--bg-hover)]"
                     )}
                   >
                     <ListTodo className="w-4 h-4" />
-                    Tasks
+                    <span className="hidden sm:inline">Tasks</span>
                   </button>
                   <button
                     onClick={() => setView("calendar")}
                     className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                      "flex items-center gap-1.5 px-2.5 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors",
                       view === "calendar"
                         ? "bg-[var(--primary)] text-white"
                         : "hover:bg-[var(--bg-hover)]"
                     )}
                   >
                     <Calendar className="w-4 h-4" />
-                    Calendar
+                    <span className="hidden sm:inline">Calendar</span>
                   </button>
                 </div>
 
@@ -545,7 +646,7 @@ export default function DashboardPage() {
                 <button
                   onClick={handleSync}
                   disabled={syncing || !data.config}
-                  className="p-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-50"
+                  className="p-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--bg-hover)] transition-colors disabled:opacity-50 shrink-0"
                   title="Sync with Canvas"
                 >
                   {syncing ? (
@@ -558,7 +659,7 @@ export default function DashboardPage() {
                 {/* Settings */}
                 <Link
                   href="/setup"
-                  className="p-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--bg-hover)] transition-colors"
+                  className="p-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--bg-hover)] transition-colors shrink-0"
                 >
                   <Settings className="w-4 h-4" />
                 </Link>
@@ -580,10 +681,14 @@ export default function DashboardPage() {
               <strong className="text-[var(--success)]">{completedCount}</strong>{" "}
               done
             </span>
-            <span>
-              ~<strong className="text-[var(--text)]">{totalTime}</strong> min
-              remaining
-            </span>
+            {totalTime > 0 ? (
+              <span>
+                ~<strong className="text-[var(--text)]">{totalTime}</strong> min
+                remaining
+              </span>
+            ) : (
+              <span className="text-[var(--text-muted)]">No estimated time</span>
+            )}
             {data.lastSynced && (
               <span className="text-xs text-[var(--text-muted)]">
                 Synced {new Date(data.lastSynced).toLocaleString()}
@@ -644,7 +749,7 @@ export default function DashboardPage() {
               onPlayTask={startFocusTask}
             />
           ) : (
-            <>
+            <div className="max-w-2xl mx-auto">
               {/* Quick-add bar */}
               <div className="flex items-center gap-2 mb-6">
                 <input
@@ -664,7 +769,7 @@ export default function DashboardPage() {
                         setShowAddDropdown((s) => !s);
                       }
                     }}
-                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-sm hover:bg-[var(--bg-hover)] transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-sm hover:bg-[var(--bg-hover)] transition-colors cursor-pointer"
                     title="Add task or block"
                   >
                     <Plus className="w-4 h-4" />
@@ -673,7 +778,7 @@ export default function DashboardPage() {
                   {showAddDropdown && (
                     <div className="absolute right-0 top-full mt-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl shadow-lg z-10 w-44 py-1">
                       <button
-                        onClick={handleQuickAddTask}
+                        onClick={() => handleQuickAddTask()}
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--bg-hover)] transition-colors"
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -697,9 +802,11 @@ export default function DashboardPage() {
                 sensors={sensors}
                 collisionDetection={closestCenter}
                 onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
                 onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
               >
-                <div className="space-y-6">
+                <div className="space-y-6 min-w-96">
                   {/* Task blocks */}
                   {data.blocks.map((block) => (
                     <TaskBlockComponent
@@ -717,6 +824,7 @@ export default function DashboardPage() {
                       onDeleteBlock={() => deleteBlock(block.id)}
                       onAddTag={addTagToTask}
                       onRemoveTag={removeTagFromTask}
+                      onCreateTag={createTag}
                       onBulkUpdateTasks={(updates) => {
                         (blockTasks[block.id] || []).forEach((t) => updateTask(t.id, updates));
                       }}
@@ -724,6 +832,10 @@ export default function DashboardPage() {
                       onDeleteTask={(taskId) => deleteTask(taskId)}
                       selectedTaskIds={selectedTaskIds}
                       onSelectTask={handleTaskSelect}
+                      draggedTaskId={draggedId}
+                      multiDragCount={multiDragIds?.size ?? 0}
+                      dropPreviewIndex={blockDropPreview?.blockId === block.id ? blockDropPreview.index : null}
+                      dropPreviewCount={blockDropPreview?.blockId === block.id ? blockDropPreview.count : 1}
                     />
                   ))}
 
@@ -738,7 +850,12 @@ export default function DashboardPage() {
                       <SortableContext items={unblockedTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                         <div className="space-y-2">
                           {unblockedTasks.map((task) => (
-                            <SortableTaskCard key={task.id} task={task}>
+                            <SortableTaskCard
+                              key={task.id}
+                              task={task}
+                              showStackPreview={multiDragIds ? multiDragIds.size > 1 && draggedId === task.id : false}
+                              stackCount={multiDragIds?.size ?? 0}
+                            >
                               <TaskCard
                                 task={task}
                                 tags={data.tags}
@@ -775,9 +892,9 @@ export default function DashboardPage() {
                       {/* Shadow cards for multi-drag stack effect */}
                       {multiDragIds && multiDragIds.size > 1 && (
                         <>
-                          <div className="absolute inset-0 translate-x-2 translate-y-2 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] opacity-50 pointer-events-none" />
+                          <div className="absolute inset-0 translate-x-2 translate-y-2 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] opacity-75 pointer-events-none" />
                           {multiDragIds.size > 2 && (
-                            <div className="absolute inset-0 translate-x-4 translate-y-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] opacity-25 pointer-events-none" />
+                            <div className="absolute inset-0 translate-x-4 translate-y-4 bg-[var(--bg-card)] rounded-xl border border-[var(--border)] opacity-50 pointer-events-none" />
                           )}
                         </>
                       )}
@@ -802,221 +919,237 @@ export default function DashboardPage() {
                   ) : null}
                 </DragOverlay>
               </DndContext>
-            </>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Bulk edit panel — fixed in left margin when tasks are selected */}
+      {/* Bulk edit panel — bottom bar with upward dropdown */}
       <AnimatePresence>
         {selectedTaskIds.size > 0 && (
           <motion.div
-            initial={{ opacity: 0, x: -16 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -16 }}
-            className="fixed left-4 top-1/2 -translate-y-1/2 z-50 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-2xl p-3 flex flex-col gap-0 w-48 max-h-[85vh] overflow-y-auto"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 md:left-4 md:translate-x-0 z-50 flex flex-col items-center md:items-start"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-[var(--text-secondary)]">
+            {/* Expanded dropdown (opens upward) */}
+            <AnimatePresence>
+              {!bulkPanelCollapsed && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                  className="mb-2 w-72 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-2xl p-3 flex flex-col gap-0 max-h-[60vh] overflow-y-auto"
+                >
+                  {/* Quick actions */}
+                  <button onClick={bulkComplete} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm hover:bg-[var(--bg-hover)] transition-colors w-full text-left">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[var(--success)] shrink-0" />
+                    <span className="text-xs">Complete all</span>
+                  </button>
+                  <button onClick={bulkDelete} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm hover:bg-red-50 text-[var(--danger)] transition-colors w-full text-left">
+                    <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                    <span className="text-xs">Delete all</span>
+                  </button>
+
+                  {/* Priority */}
+                  <div className="border-t border-[var(--border)] mt-2 pt-2">
+                    <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Priority</p>
+                    <div className="flex items-center gap-1.5">
+                      {([null, "low", "medium", "high", "urgent"] as StudyTask["priority"][]).map((p) => (
+                        <button
+                          key={String(p)}
+                          onClick={() => bulkSetPriority(p)}
+                          title={p === null ? "None" : p.charAt(0).toUpperCase() + p.slice(1)}
+                          className="w-5 h-5 rounded-full border-2 border-transparent hover:scale-110 transition-transform shrink-0"
+                          style={{
+                            backgroundColor: p === null ? "#cbd5e1" : p === "low" ? "#94a3b8" : p === "medium" ? "#f59e0b" : p === "high" ? "#f97316" : "#ef4444",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Est. duration */}
+                  <div className="border-t border-[var(--border)] mt-2 pt-2">
+                    <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Est. duration</p>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="—"
+                        value={bulkEstimateValue}
+                        onChange={(e) => setBulkEstimateValue(e.target.value)}
+                        onBlur={() => {
+                          const val = parseInt(bulkEstimateValue);
+                          if (!Number.isNaN(val) && val >= 0) {
+                            bulkSetEstimate(val);
+                            setBulkEstimateValue("");
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
+                        className="w-full text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
+                      />
+                      <span className="text-xs text-[var(--text-muted)] shrink-0">min</span>
+                    </div>
+                  </div>
+
+                  {/* Due date */}
+                  <div className="border-t border-[var(--border)] mt-2 pt-2">
+                    <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Due date</p>
+                    {!showBulkDatePicker ? (
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => setShowBulkDatePicker(true)}
+                          className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] hover:bg-[var(--bg-hover)] transition-colors text-left text-[var(--text-muted)] truncate"
+                        >
+                          {bulkDateValue ? new Date(bulkDateValue).toLocaleDateString() : "Set date..."}
+                        </button>
+                        <button
+                          onClick={() => { bulkSetDueDate(null); setBulkDateValue(""); }}
+                          className="text-xs px-1.5 py-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-muted)]"
+                          title="Clear"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <input
+                          type="datetime-local"
+                          value={bulkDateValue}
+                          onChange={(e) => setBulkDateValue(e.target.value)}
+                          autoFocus
+                          className="w-full text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
+                        />
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => { if (bulkDateValue) bulkSetDueDate(new Date(bulkDateValue).toISOString()); setShowBulkDatePicker(false); }}
+                            className="flex-1 text-xs px-2 py-1 rounded-lg bg-[var(--primary)] text-white"
+                          >
+                            Apply
+                          </button>
+                          <button onClick={() => setShowBulkDatePicker(false)} className="text-xs px-2 py-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors">✕</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Course */}
+                  {data.courses.length > 0 && (
+                    <div className="border-t border-[var(--border)] mt-2 pt-2">
+                      <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Course</p>
+                      <CustomSelect
+                        value={bulkCourseValue}
+                        onChange={(val) => {
+                          setBulkCourseValue("");
+                          const courseId = parseInt(val);
+                          if (!courseId) return;
+                          const course = data.courses.find((c) => c.id === courseId);
+                          if (course) bulkSetCourse(course.id, course.name);
+                        }}
+                        options={bulkCourseOptions}
+                        placeholder="Set course..."
+                      />
+                    </div>
+                  )}
+
+                  {/* Tags */}
+                  {data.tags.length > 0 && (
+                    <div className="border-t border-[var(--border)] mt-2 pt-2">
+                      <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Tags</p>
+                      <div className="flex flex-wrap gap-1 mb-1.5">
+                        {data.tags.map((tag) => (
+                          <button
+                            key={tag.id}
+                            onClick={() => bulkAddTag(tag.id)}
+                            title={`Add "${tag.name}" to all`}
+                            className="text-[10px] px-1.5 py-0.5 rounded text-white hover:opacity-75 transition-opacity"
+                            style={{ backgroundColor: tag.color }}
+                          >
+                            + {tag.name}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {data.tags.map((tag) => (
+                          <button
+                            key={tag.id}
+                            onClick={() => bulkRemoveTag(tag.id)}
+                            title={`Remove "${tag.name}" from all`}
+                            className="text-[10px] px-1.5 py-0.5 rounded border hover:opacity-75 transition-opacity"
+                            style={{ borderColor: tag.color, color: tag.color }}
+                          >
+                            − {tag.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Move to block */}
+                  {data.blocks.length > 0 && (
+                    <div className="border-t border-[var(--border)] mt-2 pt-2">
+                      <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Move to block</p>
+                      <CustomSelect
+                        value={bulkMoveBlockValue}
+                        onChange={(val) => {
+                          setBulkMoveBlockValue("");
+                          bulkMoveToBlock(val === "none" ? undefined : val || undefined);
+                        }}
+                        options={bulkBlockOptions}
+                        placeholder="Move to..."
+                      />
+                    </div>
+                  )}
+
+                  {/* Description */}
+                  <div className="border-t border-[var(--border)] mt-2 pt-2">
+                    <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Description</p>
+                    <textarea
+                      rows={2}
+                      placeholder="Set description..."
+                      value={bulkDescription}
+                      onChange={(e) => setBulkDescription(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                          if (bulkDescription.trim()) { bulkSetDescription(bulkDescription.trim()); setBulkDescription(""); }
+                        }
+                      }}
+                      className="w-full text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)] resize-none"
+                    />
+                    <button
+                      onClick={() => { if (bulkDescription.trim()) { bulkSetDescription(bulkDescription.trim()); setBulkDescription(""); } }}
+                      disabled={!bulkDescription.trim()}
+                      className="w-full mt-1 text-xs px-2 py-1.5 rounded-lg bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-40"
+                    >
+                      Apply to all
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Bottom bar */}
+            <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-xl px-3 py-2 flex items-center gap-2">
+              <span className="text-xs font-semibold text-[var(--text-secondary)] select-none">
                 {selectedTaskIds.size} selected
               </span>
-              <button onClick={clearSelection} className="p-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-muted)]">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Quick actions */}
-            <button onClick={bulkComplete} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm hover:bg-[var(--bg-hover)] transition-colors w-full text-left">
-              <CheckCircle2 className="w-3.5 h-3.5 text-[var(--success)] shrink-0" />
-              <span className="text-xs">Complete all</span>
-            </button>
-            <button onClick={bulkDelete} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm hover:bg-red-50 text-[var(--danger)] transition-colors w-full text-left">
-              <Trash2 className="w-3.5 h-3.5 shrink-0" />
-              <span className="text-xs">Delete all</span>
-            </button>
-
-            {/* Priority — horizontal dots */}
-            <div className="border-t border-[var(--border)] mt-2 pt-2">
-              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Priority</p>
-              <div className="flex items-center gap-1.5">
-                {([null, "low", "medium", "high", "urgent"] as StudyTask["priority"][]).map((p) => (
-                  <button
-                    key={String(p)}
-                    onClick={() => bulkSetPriority(p)}
-                    title={p === null ? "None" : p.charAt(0).toUpperCase() + p.slice(1)}
-                    className="w-5 h-5 rounded-full border-2 border-transparent hover:scale-110 transition-transform shrink-0"
-                    style={{
-                      backgroundColor: p === null ? "#cbd5e1" : p === "low" ? "#94a3b8" : p === "medium" ? "#f59e0b" : p === "high" ? "#f97316" : "#ef4444",
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Est. duration — apply on Enter/blur */}
-            <div className="border-t border-[var(--border)] mt-2 pt-2">
-              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Est. duration</p>
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  min={1}
-                  placeholder="—"
-                  value={bulkEstimateValue}
-                  onChange={(e) => setBulkEstimateValue(e.target.value)}
-                  onBlur={() => {
-                    const val = parseInt(bulkEstimateValue);
-                    if (val > 0) { bulkSetEstimate(val); setBulkEstimateValue(""); }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                  }}
-                  className="w-full text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
-                />
-                <span className="text-xs text-[var(--text-muted)] shrink-0">min</span>
-              </div>
-            </div>
-
-            {/* Due date */}
-            <div className="border-t border-[var(--border)] mt-2 pt-2">
-              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Due date</p>
-              {!showBulkDatePicker ? (
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => setShowBulkDatePicker(true)}
-                    className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] hover:bg-[var(--bg-hover)] transition-colors text-left text-[var(--text-muted)] truncate"
-                  >
-                    {bulkDateValue ? new Date(bulkDateValue).toLocaleDateString() : "Set date..."}
-                  </button>
-                  <button
-                    onClick={() => { bulkSetDueDate(null); setBulkDateValue(""); }}
-                    className="text-xs px-1.5 py-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-muted)]"
-                    title="Clear"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <input
-                    type="datetime-local"
-                    value={bulkDateValue}
-                    onChange={(e) => setBulkDateValue(e.target.value)}
-                    autoFocus
-                    className="w-full text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
-                  />
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => { if (bulkDateValue) bulkSetDueDate(new Date(bulkDateValue).toISOString()); setShowBulkDatePicker(false); }}
-                      className="flex-1 text-xs px-2 py-1 rounded-lg bg-[var(--primary)] text-white"
-                    >
-                      Apply
-                    </button>
-                    <button onClick={() => setShowBulkDatePicker(false)} className="text-xs px-2 py-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors">✕</button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Course */}
-            {data.courses.length > 0 && (
-              <div className="border-t border-[var(--border)] mt-2 pt-2">
-                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Course</p>
-                <select
-                  defaultValue=""
-                  onChange={(e) => {
-                    const courseId = parseInt(e.target.value);
-                    if (!courseId) return;
-                    const course = data.courses.find((c) => c.id === courseId);
-                    if (course) bulkSetCourse(course.id, course.name);
-                    e.target.value = "";
-                  }}
-                  className="w-full text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
-                >
-                  <option value="">Set course...</option>
-                  {data.courses.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Tags */}
-            {data.tags.length > 0 && (
-              <div className="border-t border-[var(--border)] mt-2 pt-2">
-                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Tags</p>
-                <div className="flex flex-wrap gap-1 mb-1.5">
-                  {data.tags.map((tag) => (
-                    <button
-                      key={tag.id}
-                      onClick={() => bulkAddTag(tag.id)}
-                      title={`Add "${tag.name}" to all`}
-                      className="text-[10px] px-1.5 py-0.5 rounded text-white hover:opacity-75 transition-opacity"
-                      style={{ backgroundColor: tag.color }}
-                    >
-                      + {tag.name}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {data.tags.map((tag) => (
-                    <button
-                      key={tag.id}
-                      onClick={() => bulkRemoveTag(tag.id)}
-                      title={`Remove "${tag.name}" from all`}
-                      className="text-[10px] px-1.5 py-0.5 rounded border hover:opacity-75 transition-opacity"
-                      style={{ borderColor: tag.color, color: tag.color }}
-                    >
-                      − {tag.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Move to block */}
-            {data.blocks.length > 0 && (
-              <div className="border-t border-[var(--border)] mt-2 pt-2">
-                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Move to block</p>
-                <select
-                  defaultValue=""
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    bulkMoveToBlock(val === "none" ? undefined : val || undefined);
-                    e.target.value = "";
-                  }}
-                  className="w-full text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
-                >
-                  <option value="">Move to...</option>
-                  <option value="none">Unsorted</option>
-                  {data.blocks.map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Description */}
-            <div className="border-t border-[var(--border)] mt-2 pt-2">
-              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Description</p>
-              <textarea
-                rows={2}
-                placeholder="Set description..."
-                value={bulkDescription}
-                onChange={(e) => setBulkDescription(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                    if (bulkDescription.trim()) { bulkSetDescription(bulkDescription.trim()); setBulkDescription(""); }
-                  }
-                }}
-                className="w-full text-xs px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-1 focus:ring-[var(--ring)] resize-none"
-              />
               <button
-                onClick={() => { if (bulkDescription.trim()) { bulkSetDescription(bulkDescription.trim()); setBulkDescription(""); } }}
-                disabled={!bulkDescription.trim()}
-                className="w-full mt-1 text-xs px-2 py-1.5 rounded-lg bg-[var(--primary)] text-white hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-40"
+                onClick={() => setBulkPanelCollapsed((c) => !c)}
+                className="p-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-muted)] cursor-pointer"
+                title={bulkPanelCollapsed ? "Expand" : "Collapse"}
               >
-                Apply to all
+                {bulkPanelCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+              <button
+                onClick={clearSelection}
+                className="p-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-muted)] cursor-pointer"
+                title="Clear selection"
+              >
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           </motion.div>

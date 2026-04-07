@@ -46,10 +46,20 @@ export function FocusMode({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const task = tasks[index];
+  const hasEstimate = (task?.estimatedMinutes ?? 0) > 0;
 
   // Initialize timer for current task
   useEffect(() => {
     if (!task) return;
+    if (!hasEstimate) {
+      setTotalSeconds(0);
+      setSecondsLeft(0);
+      setRunning(false);
+      setFinished(false);
+      setShowNotDoneMenu(false);
+      return;
+    }
+
     const mins = task.estimatedMinutes || defaultTimerMinutes;
     const secs = mins * 60;
     // Always use the full timer length for totalSeconds, but if the task
@@ -61,11 +71,11 @@ export function FocusMode({
     setRunning(true);
     setFinished(false);
     setShowNotDoneMenu(false);
-  }, [index, task, defaultTimerMinutes]);
+  }, [index, task, defaultTimerMinutes, hasEstimate]);
 
   // Timer tick
   useEffect(() => {
-    if (running && secondsLeft > 0) {
+    if (hasEstimate && running && secondsLeft > 0) {
       intervalRef.current = setInterval(() => {
         setSecondsLeft((prev) => {
           if (prev <= 1) {
@@ -80,7 +90,7 @@ export function FocusMode({
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [running, secondsLeft]);
+  }, [hasEstimate, running, secondsLeft]);
 
   const progress = totalSeconds > 0 ? 1 - secondsLeft / totalSeconds : 0;
   const radius = 120;
@@ -120,7 +130,7 @@ export function FocusMode({
     } else {
       onClose();
     }
-  }, [task, index, tasks.length, onSkip, onClose]);
+  }, [task, index, tasks.length, onSkip, onClose, onSaveRemaining, secondsLeft]);
 
   if (!task) return null;
 
@@ -136,9 +146,9 @@ export function FocusMode({
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-              // Save remaining seconds for current task before closing
-              onSaveRemaining(task.id, secondsLeft);
-              onClose();
+          // Save remaining seconds for current task before closing
+          onSaveRemaining(task.id, hasEstimate ? secondsLeft : 0);
+          onClose();
         }}
         className="absolute top-6 right-6 z-10 p-3 rounded-xl hover:bg-white/10 transition-colors"
       >
@@ -176,47 +186,82 @@ export function FocusMode({
       </motion.div>
 
       {/* Timer ring */}
-      <div className="relative w-72 h-72 mb-8">
-        <svg className="w-full h-full -rotate-90" viewBox="0 0 260 260">
-          {/* Background ring */}
-          <circle
-            cx="130"
-            cy="130"
-            r={radius}
-            stroke="rgba(255,255,255,0.1)"
-            strokeWidth="8"
-            fill="none"
-          />
-          {/* Progress ring */}
-          <circle
-            cx="130"
-            cy="130"
-            r={radius}
-            stroke={finished ? "#22c55e" : "#6366f1"}
-            strokeWidth="8"
-            fill="none"
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={strokeDashoffset}
-            className="transition-all duration-1000 ease-linear"
-          />
-        </svg>
+      {hasEstimate ? (
+        <div className="relative w-72 h-72 mb-8">
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 260 260">
+            {/* Background ring */}
+            <circle
+              cx="130"
+              cy="130"
+              r={radius}
+              stroke="rgba(255,255,255,0.1)"
+              strokeWidth="8"
+              fill="none"
+            />
+            {/* Progress ring */}
+            <circle
+              cx="130"
+              cy="130"
+              r={radius}
+              stroke={finished ? "#22c55e" : "#6366f1"}
+              strokeWidth="8"
+              fill="none"
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={strokeDashoffset}
+              className="transition-all duration-1000 ease-linear"
+            />
+          </svg>
 
-        {/* Timer text */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-5xl font-mono font-bold tabular-nums">
-            {formatTime(secondsLeft)}
-          </span>
-          {!finished && (
-            <span className="text-sm text-white/40 mt-2">
-              {task.estimatedMinutes || defaultTimerMinutes} min estimated
+          {/* Timer text */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-5xl font-mono font-bold tabular-nums">
+              {formatTime(secondsLeft)}
             </span>
-          )}
+            {!finished && (
+              <span className="text-sm text-white/40 mt-2">
+                {task.estimatedMinutes || defaultTimerMinutes} min estimated
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="mb-2" />
+      )}
 
       {/* Controls */}
-      {!finished ? (
+      {!hasEstimate ? (
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => {
+              onSaveRemaining(task.id, 0);
+              onComplete(task.id);
+              if (index < tasks.length - 1) {
+                setIndex(index + 1);
+              } else {
+                onClose();
+              }
+            }}
+            className="w-14 h-14 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+            title="Complete task"
+          >
+            <CheckCircle2 className="w-6 h-6" />
+          </button>
+          {tasks.length > 1 && (
+            <button
+              onClick={() => {
+                onSkip(task.id);
+                if (index < tasks.length - 1) setIndex(index + 1);
+                else onClose();
+              }}
+              className="w-14 h-14 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+              title="Skip to next"
+            >
+              <SkipForward className="w-6 h-6" />
+            </button>
+          )}
+        </div>
+      ) : !finished ? (
         <div className="flex items-center gap-4">
           <button
             onClick={() => {
@@ -257,6 +302,7 @@ export function FocusMode({
           {tasks.length > 1 && (
             <button
               onClick={() => {
+                onSkip(task.id);
                 if (index < tasks.length - 1) setIndex(index + 1);
               }}
               className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
@@ -320,13 +366,15 @@ export function FocusMode({
       )}
 
       {/* Progress bar at bottom */}
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/5">
-        <motion.div
-          className="h-full bg-[var(--primary)]"
-          style={{ width: `${progress * 100}%` }}
-          transition={{ duration: 1, ease: "linear" }}
-        />
-      </div>
+      {hasEstimate && (
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/5">
+          <motion.div
+            className="h-full bg-[var(--primary)]"
+            style={{ width: `${progress * 100}%` }}
+            transition={{ duration: 1, ease: "linear" }}
+          />
+        </div>
+      )}
     </motion.div>
   );
 }

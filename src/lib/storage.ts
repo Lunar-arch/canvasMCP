@@ -8,6 +8,10 @@ function createDefaultSettings(): AppSettings {
     extraTimeMinutes: 5,
     theme: "light",
     excludedCourseIds: [],
+    canvasTrackedCourseIds: [],
+    canvasOnlyAddFromDate: null,
+    canvasSkipNoDueDateTasks: false,
+    canvasReviewNoDueDateTasks: false,
     notion: {},
   };
 }

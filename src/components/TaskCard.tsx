@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StudyTask, Tag } from "@/types";
 import { cn } from "@/lib/cn";
 import { format, parseISO, isPast, isToday, isTomorrow } from "date-fns";
 import { motion } from "motion/react";
-import { Play, CheckCircle2, Circle, Clock, GripVertical, Pencil, Trash2 } from "lucide-react";
+import { Play, CheckCircle2, Circle, Clock, GripVertical, Pencil, Trash2, X } from "lucide-react";
 
 const PRIORITY_CONFIG = {
   low: { label: "Low", color: "#94a3b8", bg: "#f1f5f9" },
@@ -41,19 +41,19 @@ export function TaskCard({
   onEdit,
   onDelete,
   onUpdate,
+  onRemoveTag,
   isDragging,
   isSelected,
   onSelect,
 }: TaskCardProps) {
-  const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(task.title);
-  const [editingTime, setEditingTime] = useState(false);
-  const [timeValue, setTimeValue] = useState(String(task.estimatedMinutes));
+  const [timeValue, setTimeValue] = useState(task.estimatedMinutes > 0 ? String(task.estimatedMinutes) : "");
+  const [showZeroEstimateInput, setShowZeroEstimateInput] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [dateValue, setDateValue] = useState(task.dueAt ? task.dueAt.slice(0, 16) : "");
+  const timeInputRef = useRef<HTMLInputElement>(null);
 
   const priority = task.priority ? PRIORITY_CONFIG[task.priority] : null;
-
   const dueDate = task.dueAt ? parseISO(task.dueAt) : null;
   const isOverdue = dueDate ? isPast(dueDate) && !task.completed : false;
   const isDueToday = dueDate ? isToday(dueDate) : false;
@@ -70,6 +70,23 @@ export function TaskCard({
     : "No due date";
 
   const taskTags = tags.filter((t) => task.tags.includes(t.id));
+  const parsedEstimate = timeValue === "" ? 0 : Number.parseInt(timeValue, 10) || 0;
+  const hasEstimate = parsedEstimate > 0;
+  const estimateInputWidth = `${Math.max(timeValue.length, 1)}ch`;
+
+  useEffect(() => {
+    setTitleValue(task.title);
+  }, [task.title]);
+
+  useEffect(() => {
+    setTimeValue(task.estimatedMinutes > 0 ? String(task.estimatedMinutes) : "");
+  }, [task.estimatedMinutes]);
+
+  useEffect(() => {
+    if (!hasEstimate && showZeroEstimateInput) {
+      timeInputRef.current?.focus();
+    }
+  }, [hasEstimate, showZeroEstimateInput]);
 
   const cyclePriority = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -79,29 +96,24 @@ export function TaskCard({
   };
 
   const commitTitle = () => {
-    setEditingTitle(false);
     const trimmed = titleValue.trim();
-    if (trimmed && trimmed !== task.title) {
-      onUpdate({ title: trimmed });
-    } else {
-      setTitleValue(task.title);
-    }
+    if (trimmed && trimmed !== task.title) onUpdate({ title: trimmed });
+    else setTitleValue(task.title);
   };
 
   const commitTime = () => {
-    setEditingTime(false);
-    const val = parseInt(timeValue) || 25;
-    setTimeValue(String(val));
-    if (val !== task.estimatedMinutes) {
-      onUpdate({ estimatedMinutes: val });
+    const val = timeValue === "" ? 0 : Math.max(0, Number.parseInt(timeValue, 10) || 0);
+    setTimeValue(val > 0 ? String(val) : "");
+    if (val === 0) {
+      setShowZeroEstimateInput(false);
     }
+    if (val !== task.estimatedMinutes) onUpdate({ estimatedMinutes: val });
   };
 
   const commitDate = (value: string) => {
     setShowDatePicker(false);
-    const newDue = value ? new Date(value).toISOString() : null;
     setDateValue(value);
-    onUpdate({ dueAt: newDue });
+    onUpdate({ dueAt: value ? new Date(value).toISOString() : null });
   };
 
   return (
@@ -117,7 +129,7 @@ export function TaskCard({
       )}
     >
       <div className="flex items-stretch">
-        {/* Selection zone — left 6 units */}
+        {/* Selection zone */}
         <div
           className={cn(
             "w-6 shrink-0 flex items-center justify-center cursor-pointer rounded-l-xl transition-colors",
@@ -127,18 +139,16 @@ export function TaskCard({
           onClick={onSelect}
           title="Select task"
         >
-          {isSelected && (
-            <div className="w-2 h-2 rounded-full bg-[var(--primary)]" />
-          )}
+          {isSelected && <div className="w-2 h-2 rounded-full bg-[var(--primary)]" />}
         </div>
 
         {/* Main content */}
         <div className="flex-1 flex items-start gap-3 py-3 pr-3 min-w-0">
           <div className="flex items-center gap-1.5 pt-0.5">
-            <GripVertical className="w-4 h-4 text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+            <GripVertical className="w-4 h-4 text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" />
             <button
               onClick={onToggleComplete}
-              className="shrink-0 p-0.5 transition-colors"
+              className="shrink-0 p-0.5 transition-colors cursor-pointer"
             >
               {task.completed ? (
                 <CheckCircle2 className="w-5 h-5 text-[var(--success)]" />
@@ -151,41 +161,29 @@ export function TaskCard({
           <div className="flex-1 min-w-0 space-y-1.5">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
-                {/* Inline title editing */}
-                {editingTitle ? (
-                  <input
-                    type="text"
-                    value={titleValue}
-                    onChange={(e) => setTitleValue(e.target.value)}
-                    onBlur={commitTitle}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitTitle();
-                      if (e.key === "Escape") {
-                        setTitleValue(task.title);
-                        setEditingTitle(false);
-                      }
-                    }}
-                    className="text-sm font-medium w-full bg-transparent border-b border-[var(--primary)] focus:outline-none leading-tight pb-0.5"
-                    autoFocus
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <p
-                    className={cn(
-                      "text-sm font-medium leading-tight cursor-text",
-                      task.completed && "line-through text-[var(--text-muted)]"
-                    )}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingTitle(true);
-                    }}
-                  >
-                    {task.title}
-                  </p>
-                )}
+                {/* Always-visible title input */}
+                <input
+                  type="text"
+                  value={titleValue}
+                  onChange={(e) => setTitleValue(e.target.value)}
+                  onBlur={commitTitle}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    if (e.key === "Escape") {
+                      setTitleValue(task.title);
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  className={cn(
+                    "text-sm font-medium w-full bg-transparent border-b border-transparent focus:border-[var(--primary)] focus:outline-none leading-tight pb-0.5 transition-colors",
+                    task.completed && "line-through text-[var(--text-muted)]"
+                  )}
+                />
 
                 {/* Badges row */}
-                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   {task.courseName && (
                     <span
                       className="text-xs font-medium px-2 py-0.5 rounded-md"
@@ -198,7 +196,6 @@ export function TaskCard({
                     </span>
                   )}
 
-                  {/* Priority badge — click to cycle */}
                   {priority ? (
                     <button
                       type="button"
@@ -218,19 +215,31 @@ export function TaskCard({
                     </button>
                   )}
 
+                  {/* Tags with hover-X removal */}
                   {taskTags.map((tag) => (
                     <span
                       key={tag.id}
-                      className="text-xs px-2 py-0.5 rounded-md text-white"
+                      className="relative inline-flex items-center text-xs px-2.5 py-0.5 rounded-md text-white group/tag overflow-hidden cursor-default select-none"
                       style={{ backgroundColor: tag.color }}
                     >
                       {tag.name}
+                      <span
+                        className="absolute inset-y-0 right-0 left-[30%] flex items-center justify-end px-1 opacity-0 group-hover/tag:opacity-100 transition-opacity cursor-pointer"
+                        style={{ background: `linear-gradient(to right, transparent, ${tag.color})` }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveTag(tag.id);
+                        }}
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </span>
                     </span>
                   ))}
                 </div>
               </div>
 
-              {/* Hover action group */}
+              {/* Hover actions */}
               <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                 {task.secondsRemaining ? (
                   <span className="text-[10px] text-[var(--text-muted)]">
@@ -239,7 +248,7 @@ export function TaskCard({
                 ) : null}
                 <button
                   onClick={(e) => { e.stopPropagation(); onPlay(); }}
-                  className="p-1.5 rounded-lg hover:bg-[var(--primary-light)] text-[var(--text-muted)] hover:text-[var(--primary)] transition-colors"
+                  className="p-1.5 rounded-lg hover:bg-[var(--primary-light)] text-[var(--text-muted)] hover:text-[var(--primary)] transition-colors cursor-pointer"
                   title="Focus"
                 >
                   <Play className="w-3.5 h-3.5" />
@@ -247,7 +256,7 @@ export function TaskCard({
                 {onEdit && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                    className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)] text-[var(--text-muted)] transition-colors"
+                    className="p-1.5 rounded-lg hover:bg-[var(--bg-hover)] text-[var(--text-muted)] transition-colors cursor-pointer"
                     title="Edit"
                   >
                     <Pencil className="w-3.5 h-3.5" />
@@ -256,7 +265,7 @@ export function TaskCard({
                 {onDelete && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                    className="p-1.5 rounded-lg hover:bg-red-50 text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors"
+                    className="p-1.5 rounded-lg hover:bg-red-50 text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors cursor-pointer"
                     title="Delete"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -267,16 +276,14 @@ export function TaskCard({
 
             {/* Meta row */}
             <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
-              {/* Due date — click to open picker */}
+              {/* Due date */}
               <div className="relative">
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowDatePicker((s) => !s);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); setShowDatePicker((s) => !s); }}
+                  onPointerDown={(e) => e.stopPropagation()}
                   className={cn(
-                    "flex items-center gap-1 hover:text-[var(--text)] transition-colors",
+                    "flex items-center gap-1 hover:text-[var(--text)] transition-colors cursor-pointer",
                     isOverdue && "text-[var(--danger)] font-medium"
                   )}
                 >
@@ -290,6 +297,7 @@ export function TaskCard({
                   <div
                     className="absolute left-0 top-full mt-1 z-20 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl p-2 shadow-lg"
                     onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
                   >
                     <input
                       type="datetime-local"
@@ -299,27 +307,9 @@ export function TaskCard({
                       autoFocus
                     />
                     <div className="flex gap-1.5 mt-1.5">
-                      <button
-                        type="button"
-                        onClick={() => commitDate(dateValue)}
-                        className="flex-1 text-xs px-2 py-1 rounded-lg bg-[var(--primary)] text-white"
-                      >
-                        Set
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => commitDate("")}
-                        className="text-xs px-2 py-1 rounded-lg hover:bg-[var(--bg-hover)]"
-                      >
-                        Clear
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowDatePicker(false)}
-                        className="text-xs px-2 py-1 rounded-lg hover:bg-[var(--bg-hover)]"
-                      >
-                        ✕
-                      </button>
+                      <button type="button" onClick={() => commitDate(dateValue)} className="flex-1 text-xs px-2 py-1 rounded-lg bg-[var(--primary)] text-white cursor-pointer">Set</button>
+                      <button type="button" onClick={() => commitDate("")} className="text-xs px-2 py-1 rounded-lg hover:bg-[var(--bg-hover)] cursor-pointer">Clear</button>
+                      <button type="button" onClick={() => setShowDatePicker(false)} className="text-xs px-2 py-1 rounded-lg hover:bg-[var(--bg-hover)] cursor-pointer">✕</button>
                     </div>
                   </div>
                 )}
@@ -327,35 +317,50 @@ export function TaskCard({
 
               {task.pointsPossible && <span>{task.pointsPossible} pts</span>}
 
-              {/* Estimated time — click to edit inline */}
+              {/* Always-visible time input */}
               <div className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {editingTime ? (
-                  <input
-                    type="number"
-                    value={timeValue}
-                    onChange={(e) => setTimeValue(e.target.value)}
-                    onBlur={commitTime}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitTime();
-                      if (e.key === "Escape") {
-                        setTimeValue(String(task.estimatedMinutes));
-                        setEditingTime(false);
-                      }
-                    }}
-                    className="w-10 text-xs bg-transparent border-b border-transparent focus:border-[var(--primary)] focus:outline-none text-center"
-                    min={1}
-                    autoFocus
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                ) : (
+                {!hasEstimate && !showZeroEstimateInput ? (
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); setEditingTime(true); }}
-                    className="hover:text-[var(--text)] transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowZeroEstimateInput(true);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="inline-flex items-center text-[var(--text-muted)] hover:text-[var(--text)] transition-colors cursor-pointer"
+                    title="Set estimated time"
                   >
-                    {task.estimatedMinutes}m
+                    <Clock className="w-3 h-3" />
                   </button>
+                ) : (
+                  <>
+                    <Clock className="w-3 h-3" />
+                    <input
+                      ref={timeInputRef}
+                      type="number"
+                      value={timeValue}
+                      onChange={(e) => {
+                        const next = e.target.value.replace(/[^\d]/g, "");
+                        setTimeValue(next);
+                      }}
+                      onBlur={commitTime}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        if (e.key === "Escape") {
+                          const fallback = task.estimatedMinutes > 0 ? String(task.estimatedMinutes) : "";
+                          setTimeValue(fallback);
+                          if (!task.estimatedMinutes) setShowZeroEstimateInput(false);
+                          (e.target as HTMLInputElement).blur();
+                        }
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ width: estimateInputWidth }}
+                      className="min-w-[1ch] px-0 text-xs bg-transparent border-b border-transparent focus:border-[var(--primary)] focus:outline-none text-center transition-colors cursor-text"
+                      min={0}
+                    />
+                    {hasEstimate && <span>m</span>}
+                  </>
                 )}
               </div>
             </div>

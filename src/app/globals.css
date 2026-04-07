@@ -38,6 +38,20 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+button:not(:disabled),
+a[href],
+[role="button"],
+summary,
+input[type="checkbox"],
+input[type="radio"],
+label[for] {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -62,6 +76,16 @@ body {
   from {
     stroke-dashoffset: 0;
   }
+}
+
+/* Hide number input spinners globally */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
 }
 
 /* Drag overlay styling */

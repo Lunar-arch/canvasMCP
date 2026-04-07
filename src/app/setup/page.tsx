@@ -3,6 +3,7 @@
 import {
   useState,
   useEffect,
+  useMemo,
   useCallback,
   useRef,
   type ReactNode,
@@ -12,10 +13,14 @@ import { useAppData } from "@/hooks/useAppData";
 import {
   MacroStep,
   WaitType,
+  MacroIfConditionType,
   Macro,
   FieldMapping,
   MacroCredential,
   MacroSchedule,
+  Course,
+  Assignment,
+  CanvasSyncOptions,
 } from "@/types";
 import { v4 as uuid } from "uuid";
 import { motion, AnimatePresence } from "motion/react";
@@ -58,16 +63,17 @@ import Link from "next/link";
 import {
   DndContext,
   DragEndEvent,
+  DragStartEvent,
   PointerSensor,
   useSensor,
   useSensors,
   closestCenter,
+  useDroppable,
 } from "@dnd-kit/core";
 import {
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
-  arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
@@ -82,6 +88,7 @@ const ACTION_OPTIONS: {
   label: string;
   icon: React.ElementType;
 }[] = [
+  { value: "if", label: "If Block", icon: Zap },
   { value: "navigate", label: "Navigate", icon: Globe },
   { value: "fill", label: "Fill Input", icon: Type },
   { value: "click", label: "Click", icon: MousePointer },
@@ -96,6 +103,16 @@ const WAIT_TYPE_OPTIONS: { value: WaitType; label: string }[] = [
   { value: "selector", label: "Wait for Element" },
   { value: "navigation", label: "Wait for Page Load" },
   { value: "duration", label: "Wait (fixed time)" },
+];
+
+const IF_CONDITION_OPTIONS: { value: MacroIfConditionType; label: string }[] = [
+  { value: "always", label: "Always" },
+  { value: "urlIncludes", label: "Current URL includes" },
+  { value: "urlMatches", label: "Current URL matches pattern" },
+  { value: "elementExists", label: "Element exists" },
+  { value: "elementNotExists", label: "Element does not exist" },
+  { value: "elementTextContains", label: "Element text contains" },
+  { value: "elementTextEquals", label: "Element text equals" },
 ];
 
 const TASK_FIELDS: { value: FieldMapping["taskField"]; label: string }[] = [
@@ -157,11 +174,15 @@ function SortableStep({
   index,
   updateStep,
   removeStep,
+  selected,
+  onToggleSelected,
 }: {
   step: MacroStep;
   index: number;
   updateStep: (id: string, u: Partial<MacroStep>) => void;
   removeStep: (id: string) => void;
+  selected: boolean;
+  onToggleSelected: (id: string, checked: boolean) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: step.id });
@@ -173,16 +194,39 @@ function SortableStep({
     zIndex: isDragging ? 10 : undefined,
   };
 
+  const [labelValue, setLabelValue] = useState(step.label);
+
+  useEffect(() => {
+    setLabelValue(step.label);
+  }, [step.id, step.label]);
+
+  const commitLabel = () => {
+    if (labelValue !== step.label) {
+      updateStep(step.id, { label: labelValue });
+    }
+  };
+
   const meta = ACTION_OPTIONS.find((a) => a.value === step.action);
   const Icon = meta?.icon || Globe;
+  const ifConditionType = step.ifConditionType || "urlIncludes";
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-start gap-2 p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] group"
+      className={`flex items-start gap-2 p-3 rounded-xl border bg-[var(--bg-card)] group ${
+        step.action === "if"
+          ? "border-[var(--primary)]/50"
+          : "border-[var(--border)]"
+      }`}
     >
-      <div className="flex items-center gap-1.5 pt-1.5">
+      <div className="flex items-center gap-1.5 pt-1">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={(e) => onToggleSelected(step.id, e.target.checked)}
+          className="w-3.5 h-3.5"
+        />
         <button
           {...attributes}
           {...listeners}
@@ -212,10 +256,20 @@ function SortableStep({
           </div>
           <input
             type="text"
-            value={step.label}
-            onChange={(e) => updateStep(step.id, { label: e.target.value })}
+            value={labelValue}
+            onChange={(e) => setLabelValue(e.target.value)}
+            onBlur={commitLabel}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              if (e.key === "Escape") {
+                setLabelValue(step.label);
+                (e.target as HTMLInputElement).blur();
+              }
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             placeholder="Step label"
-            className="flex-1 min-w-0 text-sm bg-transparent outline-none text-[var(--text)]"
+            className="flex-1 min-w-0 text-sm font-medium bg-transparent border-b border-transparent focus:border-[var(--primary)] focus:outline-none leading-tight pb-0.5 transition-colors text-[var(--text)] placeholder:text-[var(--text-muted)]"
           />
           <button
             onClick={() => removeStep(step.id)}
@@ -226,6 +280,76 @@ function SortableStep({
         </div>
 
         <div className="flex gap-2 flex-wrap">
+          {step.action === "if" && (
+            <div className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-2.5 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-[var(--text-muted)]">If</span>
+                <select
+                  value={ifConditionType}
+                  onChange={(e) =>
+                    updateStep(step.id, {
+                      ifConditionType: e.target.value as MacroIfConditionType,
+                    })
+                  }
+                  className="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                >
+                  {IF_CONDITION_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {(ifConditionType === "urlIncludes" || ifConditionType === "urlMatches") && (
+                <Input
+                  value={step.ifTarget || ""}
+                  onChange={(v) => updateStep(step.id, { ifTarget: v })}
+                  placeholder={
+                    ifConditionType === "urlIncludes"
+                      ? "URL fragment (e.g. instructure.com)"
+                      : "URL pattern (e.g. **/dashboard**)"
+                  }
+                  mono
+                  className="w-full"
+                />
+              )}
+
+              {(ifConditionType === "elementExists" ||
+                ifConditionType === "elementNotExists" ||
+                ifConditionType === "elementTextContains" ||
+                ifConditionType === "elementTextEquals") && (
+                <Input
+                  value={step.ifTarget || ""}
+                  onChange={(v) => updateStep(step.id, { ifTarget: v })}
+                  placeholder="CSS selector (e.g. .dashboard-title)"
+                  mono
+                  className="w-full"
+                />
+              )}
+
+              {(ifConditionType === "elementTextContains" ||
+                ifConditionType === "elementTextEquals") && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Input
+                    value={step.ifValue || ""}
+                    onChange={(v) => updateStep(step.id, { ifValue: v })}
+                    placeholder="Text to compare"
+                    className="flex-1 min-w-[180px]"
+                  />
+                  <label className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] select-none">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(step.ifCaseSensitive)}
+                      onChange={(e) =>
+                        updateStep(step.id, { ifCaseSensitive: e.target.checked })
+                      }
+                    />
+                    Case sensitive
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
+
           {(step.action === "fill" || step.action === "click" || step.action === "press") && (
             <Input
               value={step.selector || ""}
@@ -321,6 +445,23 @@ function SortableStep({
   );
 }
 
+function StepDropZone({ id, label }: { id: string; label: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`rounded-lg border border-dashed px-3 py-2 text-xs transition-colors ${
+        isOver
+          ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
+          : "border-[var(--border)] text-[var(--text-muted)]"
+      }`}
+    >
+      {label}
+    </div>
+  );
+}
+
 // ─── StepsTab ─────────────────────────────────────────────────────────────────
 
 function StepsTab({
@@ -333,68 +474,305 @@ function StepsTab({
   onGoToRecord: () => void;
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const [selectedStepIds, setSelectedStepIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setSelectedStepIds((prev) => {
+      const next = new Set<string>();
+      const valid = new Set(macro.steps.map((s) => s.id));
+      prev.forEach((id) => {
+        if (valid.has(id)) next.add(id);
+      });
+      return next;
+    });
+  }, [macro.steps]);
+
+  const stepById = useMemo(() => {
+    const map = new globalThis.Map<string, MacroStep>();
+    macro.steps.forEach((s) => map.set(s.id, s));
+    return map;
+  }, [macro.steps]);
+
+  const childrenByParent = useMemo(() => {
+    const map = new globalThis.Map<string | null, MacroStep[]>();
+    macro.steps.forEach((s) => {
+      const key = s.parentIfId || null;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(s);
+    });
+    return map;
+  }, [macro.steps]);
+
+  const getChildren = useCallback(
+    (parentIfId: string | null) => childrenByParent.get(parentIfId) || [],
+    [childrenByParent]
+  );
 
   const updateStep = (id: string, u: Partial<MacroStep>) => {
     onUpdate({ steps: macro.steps.map((s) => (s.id === id ? { ...s, ...u } : s)) });
   };
+
+  const collectStepAndDescendants = useCallback(
+    (id: string, ids: Set<string>) => {
+      ids.add(id);
+      getChildren(id).forEach((child) => collectStepAndDescendants(child.id, ids));
+    },
+    [getChildren]
+  );
+
   const removeStep = (id: string) => {
-    onUpdate({ steps: macro.steps.filter((s) => s.id !== id) });
+    const ids = new Set<string>();
+    collectStepAndDescendants(id, ids);
+    onUpdate({ steps: macro.steps.filter((s) => !ids.has(s.id)) });
+    setSelectedStepIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((removeId) => next.delete(removeId));
+      return next;
+    });
   };
-  const addStep = () => {
+
+  const addStep = (parentIfId: string | null = null, action: MacroStep["action"] = "click") => {
+    const baseStep: MacroStep =
+      action === "if"
+        ? {
+            id: uuid(),
+            action: "if",
+            ifConditionType: "urlIncludes",
+            ifTarget: "",
+            label: "If block",
+          }
+        : {
+            id: uuid(),
+            action,
+            selector: action === "click" || action === "fill" || action === "press" ? "" : undefined,
+            label: "New step",
+          };
+
     onUpdate({
       steps: [
         ...macro.steps,
-        { id: uuid(), action: "click", selector: "", label: "New step" },
+        {
+          ...baseStep,
+          parentIfId: parentIfId || undefined,
+        },
       ],
     });
   };
+
+  const onToggleSelected = (id: string, checked: boolean) => {
+    setSelectedStepIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const isInvalidMove = useCallback(
+    (dragIds: string[], destinationParentId: string | null) => {
+      if (!destinationParentId) return false;
+
+      let current: string | null = destinationParentId;
+      while (current) {
+        if (dragIds.includes(current)) return true;
+        current = stepById.get(current)?.parentIfId || null;
+      }
+
+      return false;
+    },
+    [stepById]
+  );
+
+  const onDragStart = (_e: DragStartEvent) => {
+    // no-op, kept for future visual drag state
+  };
+
   const onDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    const oldIndex = macro.steps.findIndex((s) => s.id === active.id);
-    const newIndex = macro.steps.findIndex((s) => s.id === over.id);
-    onUpdate({ steps: arrayMove(macro.steps, oldIndex, newIndex) });
+    if (!over) return;
+
+    const activeId = String(active.id);
+    const activeStep = stepById.get(activeId);
+    if (!activeStep) return;
+
+    const sourceParentId = activeStep.parentIfId || null;
+    const sourceSiblings = getChildren(sourceParentId);
+
+    let dragIds = selectedStepIds.has(activeId) ? Array.from(selectedStepIds) : [activeId];
+    dragIds = dragIds.filter(
+      (id) => (stepById.get(id)?.parentIfId || null) === sourceParentId
+    );
+    if (dragIds.length === 0) dragIds = [activeId];
+
+    const movingSteps = sourceSiblings.filter((s) => dragIds.includes(s.id));
+    if (movingSteps.length === 0) return;
+
+    const overId = String(over.id);
+    let destinationParentId: string | null = null;
+    let destinationBeforeId: string | null = null;
+
+    if (overId === "drop-root") {
+      destinationParentId = null;
+    } else if (overId.startsWith("drop-")) {
+      destinationParentId = overId.replace("drop-", "") || null;
+    } else {
+      const overStep = stepById.get(overId);
+      if (!overStep) return;
+
+      if (overStep.action === "if" && overStep.id !== activeId) {
+        destinationParentId = overStep.id;
+      } else {
+        destinationParentId = overStep.parentIfId || null;
+        destinationBeforeId = overStep.id;
+      }
+    }
+
+    if (isInvalidMove(dragIds, destinationParentId)) return;
+
+    const groups = new globalThis.Map<string | null, MacroStep[]>();
+    childrenByParent.forEach((items, parentId) => {
+      groups.set(parentId, [...items]);
+    });
+
+    groups.forEach((items, parentId) => {
+      groups.set(parentId, items.filter((item) => !dragIds.includes(item.id)));
+    });
+
+    const moved = movingSteps.map((s) => ({
+      ...s,
+      parentIfId: destinationParentId || undefined,
+    }));
+
+    const destList = [...(groups.get(destinationParentId) || [])];
+    let insertIndex = destList.length;
+    if (destinationBeforeId) {
+      const idx = destList.findIndex((s) => s.id === destinationBeforeId);
+      insertIndex = idx === -1 ? destList.length : idx;
+    }
+    destList.splice(insertIndex, 0, ...moved);
+    groups.set(destinationParentId, destList);
+
+    const flatten = (parentId: string | null): MacroStep[] => {
+      const items = groups.get(parentId) || [];
+      const output: MacroStep[] = [];
+      items.forEach((item) => {
+        output.push(item);
+        output.push(...flatten(item.id));
+      });
+      return output;
+    };
+
+    const nextSteps = flatten(null);
+    const seen = new Set(nextSteps.map((s) => s.id));
+    macro.steps.forEach((s) => {
+      if (!seen.has(s.id)) nextSteps.push(s);
+    });
+
+    onUpdate({ steps: nextSteps });
+  };
+
+  const renderStepList = (parentIfId: string | null): ReactNode => {
+    const list = getChildren(parentIfId);
+
+    return (
+      <SortableContext items={list.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+        <div className="space-y-2">
+          {list.map((step, i) => (
+            <div key={step.id} className={step.action === "if" ? "rounded-xl bg-[var(--primary)]/5 p-2" : ""}>
+              <SortableStep
+                step={step}
+                index={i}
+                updateStep={updateStep}
+                removeStep={removeStep}
+                selected={selectedStepIds.has(step.id)}
+                onToggleSelected={onToggleSelected}
+              />
+
+              {step.action === "if" && (
+                <div className="mt-2 ml-6 pl-3 border-l border-dashed border-[var(--primary)]/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
+                      Then
+                    </span>
+                    <button
+                      onClick={() => addStep(step.id)}
+                      className="text-[11px] px-2 py-1 rounded-md border border-[var(--border)] hover:bg-[var(--bg-card)] transition-colors"
+                    >
+                      Add inside
+                    </button>
+                  </div>
+                  {renderStepList(step.id)}
+                </div>
+              )}
+            </div>
+          ))}
+
+          <StepDropZone
+            id={parentIfId ? `drop-${parentIfId}` : "drop-root"}
+            label={
+              parentIfId
+                ? "Drop step(s) here to place inside this block"
+                : "Drop step(s) here to place at top level"
+            }
+          />
+        </div>
+      </SortableContext>
+    );
   };
 
   return (
     <div className="space-y-3 p-4">
-      <div className="flex items-center justify-between">
+      {macro.sourceType === "canvas" && (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-3 space-y-2">
+          <p className="text-sm font-medium">Canvas login flow</p>
+          <ul className="list-disc pl-5 space-y-1 text-xs text-[var(--text-muted)]">
+            <li>Only automate the path from your school portal to your Canvas dashboard.</li>
+            <li>After login, we open a separate tab in the same browser session and reuse your session cookies to fetch courses and assignments.</li>
+            <li>When syncing is done, the automation browser session is closed.</li>
+            <li>Credentials are stored in localStorage on your device and are only sent to this app&apos;s <code className="text-[11px] px-1 py-0.5 rounded bg-[var(--bg)] border border-[var(--border)]">/api/canvas</code> route when you run the macro.</li>
+          </ul>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-[var(--text-muted)]">
           {macro.steps.length} step{macro.steps.length !== 1 ? "s" : ""}
           {" · "}Use <code className="text-xs bg-[var(--bg-card)] border border-[var(--border)] px-1 py-0.5 rounded">{"{{key}}"}</code> to reference credentials.
+          {" · "}Tick multiple steps and drag one selected step to move them together.
         </p>
         <button
           onClick={onGoToRecord}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-card)] transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-card)] transition-colors shrink-0"
         >
           <Video className="w-3.5 h-3.5" />
           Record
         </button>
       </div>
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={macro.steps.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-          <div className="space-y-2">
-            {macro.steps.map((step, i) => (
-              <SortableStep
-                key={step.id}
-                step={step}
-                index={i}
-                updateStep={updateStep}
-                removeStep={removeStep}
-              />
-            ))}
-          </div>
-        </SortableContext>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+      >
+        {renderStepList(null)}
       </DndContext>
 
-      <button
-        onClick={addStep}
-        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-[var(--border)] text-sm text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--primary)] hover:bg-[var(--bg-card)] transition-colors"
-      >
-        <Plus className="w-4 h-4" />
-        Add Step
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => addStep()}
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-[var(--border)] text-sm text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--primary)] hover:bg-[var(--bg-card)] transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add Step
+        </button>
+        <button
+          onClick={() => addStep(null, "if")}
+          className="px-3 py-2.5 rounded-xl border border-[var(--border)] text-sm hover:bg-[var(--bg-card)] transition-colors"
+        >
+          Add If Block
+        </button>
+      </div>
     </div>
   );
 }
@@ -911,28 +1289,246 @@ function RunTab({
   macro: Macro;
   onUpdate: (updates: Partial<Macro>) => void;
 }) {
-  const { syncFromCanvas, saveConfig } = useAppData();
+  const { data, syncFromCanvas, saveConfig } = useAppData();
   const [status, setStatus] = useState<"idle" | "running" | "success" | "error">("idle");
-  const [logs, setLogs] = useState<{ level: string; msg: string; time: string }[]>([]);
+  type CanvasRunDebugStep = {
+    stepNumber: number;
+    action: MacroStep["action"];
+    label: string;
+    status: "success" | "error";
+    detail?: string;
+    url?: string;
+    error?: string;
+    screenshotDataUrl?: string;
+  };
+  type RunLogEntry = {
+    id: string;
+    level: "info" | "success" | "warn" | "error";
+    msg: string;
+    time: string;
+    debugStep?: CanvasRunDebugStep;
+  };
+
+  const [logs, setLogs] = useState<RunLogEntry[]>([]);
+  const [expandedDebugLogs, setExpandedDebugLogs] = useState<Set<string>>(new Set());
+  const [pendingImport, setPendingImport] = useState<{
+    courses: Course[];
+    assignments: Assignment[];
+  } | null>(null);
+  const [showImportOptions, setShowImportOptions] = useState(false);
+  const [showNoDueReview, setShowNoDueReview] = useState(false);
+  const [selectedCourseIds, setSelectedCourseIds] = useState<Set<number>>(new Set());
+  const [onlyAddFromDate, setOnlyAddFromDate] = useState("");
+  const [skipNoDueDateTasks, setSkipNoDueDateTasks] = useState(false);
+  const [reviewNoDueDateTasks, setReviewNoDueDateTasks] = useState(false);
+  const [selectedNoDueAssignmentIds, setSelectedNoDueAssignmentIds] = useState<Set<number>>(new Set());
   const logsEndRef = useRef<HTMLDivElement>(null);
 
-  const log = (msg: string, level = "info") => {
+  const log = (msg: string, level: RunLogEntry["level"] = "info") => {
     setLogs((prev) => [
       ...prev,
-      { level, msg, time: new Date().toLocaleTimeString() },
+      { id: uuid(), level, msg, time: new Date().toLocaleTimeString() },
     ]);
+  };
+
+  const parseDebugSteps = (value: unknown): CanvasRunDebugStep[] => {
+    if (!Array.isArray(value)) return [];
+
+    return value
+      .filter((raw): raw is Record<string, unknown> => typeof raw === "object" && raw !== null)
+      .filter((raw) => typeof raw.stepNumber === "number" && typeof raw.action === "string")
+      .map((raw) => ({
+        stepNumber: raw.stepNumber as number,
+        action: raw.action as MacroStep["action"],
+        label: typeof raw.label === "string" ? raw.label : "",
+        status: raw.status === "error" ? "error" : "success",
+        detail: typeof raw.detail === "string" ? raw.detail : undefined,
+        url: typeof raw.url === "string" ? raw.url : undefined,
+        error: typeof raw.error === "string" ? raw.error : undefined,
+        screenshotDataUrl:
+          typeof raw.screenshotDataUrl === "string"
+            ? raw.screenshotDataUrl
+            : undefined,
+      }));
+  };
+
+  const appendDebugSteps = (steps: CanvasRunDebugStep[]) => {
+    if (steps.length === 0) return;
+    const debugLogs: RunLogEntry[] = steps.map((step): RunLogEntry => ({
+      id: uuid(),
+      level: step.status === "error" ? "error" : "info",
+      msg: `${
+        step.detail || step.label || step.action
+      }${step.screenshotDataUrl ? " · screenshot captured" : ""}`,
+      time: new Date().toLocaleTimeString(),
+      debugStep: step,
+    }));
+    setLogs((prev) => [
+      ...prev,
+      ...debugLogs,
+    ]);
+  };
+
+  const toggleDebugLog = (id: string) => {
+    setExpandedDebugLogs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
+  const existingAssignmentIds = useMemo(
+    () =>
+      new Set(
+        data.tasks
+          .filter((t) => t.assignmentId !== undefined)
+          .map((t) => t.assignmentId as number)
+      ),
+    [data.tasks]
+  );
+
+  const trackedAssignmentCount = useMemo(() => {
+    if (!pendingImport) return 0;
+    return pendingImport.assignments.filter((a) => selectedCourseIds.has(a.course_id)).length;
+  }, [pendingImport, selectedCourseIds]);
+
+  const noDueCandidates = useMemo(() => {
+    if (!pendingImport) return [];
+    return pendingImport.assignments.filter(
+      (a) =>
+        selectedCourseIds.has(a.course_id) &&
+        !a.due_at &&
+        !existingAssignmentIds.has(a.id)
+    );
+  }, [pendingImport, selectedCourseIds, existingAssignmentIds]);
+
   const getCred = (key: string) =>
     macro.credentials.find((c) => c.key === key)?.value || "";
+
+  const closeImportFlow = () => {
+    setPendingImport(null);
+    setShowImportOptions(false);
+    setShowNoDueReview(false);
+    setSelectedNoDueAssignmentIds(new Set());
+  };
+
+  const initializeImportFlow = (courses: Course[], assignments: Assignment[]) => {
+    const validTracked = (data.settings.canvasTrackedCourseIds || []).filter((id) =>
+      courses.some((c) => c.id === id)
+    );
+    const initialTracked = validTracked.length > 0 ? validTracked : courses.map((c) => c.id);
+
+    setSelectedCourseIds(new Set(initialTracked));
+    setOnlyAddFromDate(data.settings.canvasOnlyAddFromDate || "");
+
+    const skipNoDue = Boolean(data.settings.canvasSkipNoDueDateTasks);
+    setSkipNoDueDateTasks(skipNoDue);
+    setReviewNoDueDateTasks(
+      skipNoDue ? false : Boolean(data.settings.canvasReviewNoDueDateTasks)
+    );
+
+    setSelectedNoDueAssignmentIds(new Set());
+    setPendingImport({ courses, assignments });
+    setShowImportOptions(true);
+    setShowNoDueReview(false);
+    setStatus("idle");
+    log("Review tracked courses and import options before adding tasks.");
+  };
+
+  const finalizeImport = () => {
+    if (!pendingImport) return;
+
+    const trackedCourseIds = Array.from(selectedCourseIds);
+    const syncOptions: CanvasSyncOptions = {
+      trackedCourseIds,
+      onlyAddFromDate: onlyAddFromDate || null,
+      excludeNoDueDateTasks: skipNoDueDateTasks,
+      reviewNoDueDateTasks: reviewNoDueDateTasks && !skipNoDueDateTasks,
+      approvedNoDueAssignmentIds:
+        reviewNoDueDateTasks && !skipNoDueDateTasks
+          ? Array.from(selectedNoDueAssignmentIds)
+          : undefined,
+    };
+
+    const username = getCred("username");
+    const password = getCred("password");
+    const portalUrl = getCred("portalUrl");
+    const schoolName = macro.schoolName || "";
+
+    saveConfig({
+      username,
+      password,
+      portalUrl,
+      schoolName,
+      macroSteps: macro.steps,
+      syncOptions,
+    });
+
+    setStatus("running");
+    log(
+      `Importing from ${trackedCourseIds.length} tracked course${
+        trackedCourseIds.length === 1 ? "" : "s"
+      }...`
+    );
+
+    syncFromCanvas(pendingImport.courses, pendingImport.assignments, syncOptions);
+
+    log("Tasks synced successfully ✓", "success");
+    setStatus("success");
+    onUpdate({ lastRun: new Date().toISOString(), lastRunStatus: "success" });
+    closeImportFlow();
+  };
+
+  const continueFromImportOptions = () => {
+    if (!pendingImport) return;
+
+    if (reviewNoDueDateTasks && !skipNoDueDateTasks) {
+      if (noDueCandidates.length > 0) {
+        setSelectedNoDueAssignmentIds(new Set(noDueCandidates.map((a) => a.id)));
+        setShowImportOptions(false);
+        setShowNoDueReview(true);
+        return;
+      }
+      log("No no-due-date tasks found to review in tracked courses.");
+    }
+
+    finalizeImport();
+  };
+
+  const cancelImportFlow = () => {
+    closeImportFlow();
+    setStatus("idle");
+    log("Import cancelled.", "warn");
+  };
+
+  const toggleCourseSelection = (courseId: number) => {
+    setSelectedCourseIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(courseId)) next.delete(courseId);
+      else next.add(courseId);
+      return next;
+    });
+  };
+
+  const toggleNoDueAssignmentSelection = (assignmentId: number) => {
+    setSelectedNoDueAssignmentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(assignmentId)) next.delete(assignmentId);
+      else next.add(assignmentId);
+      return next;
+    });
+  };
 
   const run = async () => {
     setStatus("running");
     setLogs([]);
+    setExpandedDebugLogs(new Set());
+    closeImportFlow();
     log("Starting macro: " + macro.name);
 
     if (macro.sourceType === "canvas") {
@@ -949,31 +1545,128 @@ function RunTab({
       }
 
       // Save config for backwards compatibility
-      saveConfig({ username, password, portalUrl, schoolName, macroSteps: macro.steps });
+      saveConfig({
+        username,
+        password,
+        portalUrl,
+        schoolName,
+        macroSteps: macro.steps,
+        syncOptions: data.config?.syncOptions,
+      });
 
-      log("Launching browser automation...");
       try {
-        const res = await fetch("/api/canvas", {
+        const res = await fetch("/api/canvas?stream=1", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username, password, portalUrl, schoolName, macroSteps: macro.steps }),
         });
 
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: "Unknown error" }));
-          log("Error: " + (err.error || res.statusText), "error");
+        if (!res.ok || !res.body) {
+          const payload = (await res
+            .json()
+            .catch(() => ({ error: "Unknown error" }))) as Record<string, unknown>;
+          const debugSteps = parseDebugSteps(payload.debugSteps);
+          appendDebugSteps(debugSteps);
+          log(
+            "Error: " +
+              (typeof payload.error === "string" ? payload.error : res.statusText),
+            "error"
+          );
           setStatus("error");
           onUpdate({ lastRun: new Date().toISOString(), lastRunStatus: "error" });
           return;
         }
 
-        const data = await res.json();
-        const { courses = [], assignments = [] } = data;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let resultPayload: Record<string, unknown> | null = null;
+        let streamErrored = false;
+
+        const processStreamLine = (line: string) => {
+          if (!line.trim()) return;
+
+          let event: Record<string, unknown>;
+          try {
+            event = JSON.parse(line) as Record<string, unknown>;
+          } catch {
+            return;
+          }
+
+          const type = typeof event.type === "string" ? event.type : "";
+
+          if (type === "log") {
+            log(
+              typeof event.msg === "string" ? event.msg : "…",
+              event.level === "error" || event.level === "success" || event.level === "warn"
+                ? event.level
+                : "info"
+            );
+            return;
+          }
+
+          if (type === "debugStep") {
+            appendDebugSteps(parseDebugSteps([event.step]));
+            return;
+          }
+
+          if (type === "error") {
+            appendDebugSteps(parseDebugSteps(event.debugSteps));
+            log(
+              "Error: " +
+                (typeof event.error === "string" ? event.error : "Unknown error"),
+              "error"
+            );
+            streamErrored = true;
+            return;
+          }
+
+          if (type === "result") {
+            resultPayload =
+              typeof event.payload === "object" && event.payload !== null
+                ? (event.payload as Record<string, unknown>)
+                : null;
+          }
+        };
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          let newlineIndex = buffer.indexOf("\n");
+          while (newlineIndex !== -1) {
+            const line = buffer.slice(0, newlineIndex);
+            buffer = buffer.slice(newlineIndex + 1);
+            processStreamLine(line);
+            newlineIndex = buffer.indexOf("\n");
+          }
+        }
+
+        if (buffer.trim()) {
+          processStreamLine(buffer);
+        }
+
+        const payload = resultPayload as Record<string, unknown> | null;
+
+        if (streamErrored || !payload) {
+          setStatus("error");
+          onUpdate({ lastRun: new Date().toISOString(), lastRunStatus: "error" });
+          return;
+        }
+
+        if (typeof payload.engine === "string") {
+          log(`Automation engine: ${payload.engine}`);
+        }
+        const courses: Course[] = Array.isArray(payload.courses)
+          ? payload.courses
+          : [];
+        const assignments: Assignment[] = Array.isArray(payload.assignments)
+          ? payload.assignments
+          : [];
         log(`Fetched ${courses.length} courses, ${assignments.length} assignments`);
-        syncFromCanvas(courses, assignments);
-        log("Tasks synced successfully ✓", "success");
-        setStatus("success");
-        onUpdate({ lastRun: new Date().toISOString(), lastRunStatus: "success" });
+        initializeImportFlow(courses, assignments);
       } catch (err) {
         log(`Network error: ${err}`, "error");
         setStatus("error");
@@ -987,74 +1680,353 @@ function RunTab({
   };
 
   return (
-    <div className="flex flex-col h-full p-4 gap-4">
-      {/* Status bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className={`flex items-center gap-2 text-sm font-medium ${
-            status === "success" ? "text-green-500" :
-            status === "error" ? "text-red-500" :
-            status === "running" ? "text-[var(--primary)]" :
-            "text-[var(--text-muted)]"
-          }`}>
-            {status === "running" && <Loader2 className="w-4 h-4 animate-spin" />}
-            {status === "success" && <CheckCircle2 className="w-4 h-4" />}
-            {status === "error" && <AlertCircle className="w-4 h-4" />}
-            {status === "idle" && <Terminal className="w-4 h-4" />}
-            {status === "idle" ? "Ready" :
-             status === "running" ? "Running…" :
-             status === "success" ? "Success" : "Failed"}
-          </div>
-          {macro.lastRun && (
-            <span className="text-xs text-[var(--text-muted)]">
-              Last run: {new Date(macro.lastRun).toLocaleString()}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {logs.length > 0 && (
-            <button
-              onClick={() => setLogs([])}
-              className="text-xs text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
-            >
-              Clear
-            </button>
-          )}
-          <button
-            onClick={run}
-            disabled={status === "running"}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
-          >
-            {status === "running" ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Play className="w-4 h-4" />
+    <>
+      <div className="flex flex-col h-full p-4 gap-4">
+        {/* Status bar */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-2 text-sm font-medium ${
+              status === "success" ? "text-green-500" :
+              status === "error" ? "text-red-500" :
+              status === "running" ? "text-[var(--primary)]" :
+              "text-[var(--text-muted)]"
+            }`}>
+              {status === "running" && <Loader2 className="w-4 h-4 animate-spin" />}
+              {status === "success" && <CheckCircle2 className="w-4 h-4" />}
+              {status === "error" && <AlertCircle className="w-4 h-4" />}
+              {status === "idle" && <Terminal className="w-4 h-4" />}
+              {status === "idle" ? "Ready" :
+               status === "running" ? "Running…" :
+               status === "success" ? "Success" : "Failed"}
+            </div>
+            {macro.lastRun && (
+              <span className="text-xs text-[var(--text-muted)]">
+                Last run: {new Date(macro.lastRun).toLocaleString()}
+              </span>
             )}
-            Run Now
-          </button>
+          </div>
+          <div className="flex items-center gap-2">
+            {logs.length > 0 && (
+              <button
+                onClick={() => setLogs([])}
+                className="text-xs text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+              >
+                Clear
+              </button>
+            )}
+            <button
+              onClick={run}
+              disabled={status === "running"}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+            >
+              {status === "running" ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
+              Run Now
+            </button>
+          </div>
+        </div>
+
+        {/* Console */}
+        <div className="flex-1 rounded-xl border border-[var(--border)] bg-gray-950 overflow-y-auto font-mono text-xs p-3 space-y-1 min-h-[200px]">
+          {logs.length === 0 ? (
+            <span className="text-gray-500">Waiting to run…</span>
+          ) : (
+            logs.map((l) => (
+              <div key={l.id} className="space-y-1">
+                <div className="flex gap-2 items-start">
+                  <span className="text-gray-600 shrink-0">{l.time}</span>
+                  {l.debugStep ? (
+                    <button
+                      onClick={() => toggleDebugLog(l.id)}
+                      className="flex items-center gap-1.5 min-w-0 text-left"
+                    >
+                      <ChevronRight
+                        className={`w-3 h-3 shrink-0 transition-transform ${
+                          expandedDebugLogs.has(l.id) ? "rotate-90" : ""
+                        } ${l.debugStep.status === "error" ? "text-red-400" : "text-gray-400"}`}
+                      />
+                      <span
+                        className={
+                          l.level === "error"
+                            ? "text-red-400"
+                            : l.level === "success"
+                            ? "text-green-400"
+                            : l.level === "warn"
+                            ? "text-yellow-400"
+                            : "text-gray-300"
+                        }
+                      >
+                        {l.msg}
+                        {l.debugStep.screenshotDataUrl ? " (screenshot)" : ""}
+                      </span>
+                    </button>
+                  ) : (
+                    <span
+                      className={
+                        l.level === "error"
+                          ? "text-red-400"
+                          : l.level === "success"
+                          ? "text-green-400"
+                          : l.level === "warn"
+                          ? "text-yellow-400"
+                          : "text-gray-300"
+                      }
+                    >
+                      {l.msg}
+                    </span>
+                  )}
+                </div>
+
+                {l.debugStep && expandedDebugLogs.has(l.id) && (
+                  <div className="ml-[4.5rem] rounded-lg border border-gray-800 bg-gray-900/70 p-2 space-y-2 text-[11px]">
+                    <div className="text-gray-300">Action: {l.debugStep.action}</div>
+                    {l.debugStep.detail && (
+                      <div className="text-gray-300">Detail: {l.debugStep.detail}</div>
+                    )}
+                    {l.debugStep.url && (
+                      <div className="text-gray-400 break-all">URL: {l.debugStep.url}</div>
+                    )}
+                    {l.debugStep.error && (
+                      <div className="text-red-400 break-all">Error: {l.debugStep.error}</div>
+                    )}
+                    {l.debugStep.screenshotDataUrl && (
+                      <img
+                        src={l.debugStep.screenshotDataUrl}
+                        alt={`Step ${l.debugStep.stepNumber} screenshot`}
+                        className="w-full max-h-80 object-contain rounded-md border border-gray-700 bg-black"
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+          <div ref={logsEndRef} />
         </div>
       </div>
 
-      {/* Console */}
-      <div className="flex-1 rounded-xl border border-[var(--border)] bg-gray-950 overflow-y-auto font-mono text-xs p-3 space-y-1 min-h-[200px]">
-        {logs.length === 0 ? (
-          <span className="text-gray-500">Waiting to run…</span>
-        ) : (
-          logs.map((l, i) => (
-            <div key={i} className="flex gap-2">
-              <span className="text-gray-600 shrink-0">{l.time}</span>
-              <span className={
-                l.level === "error" ? "text-red-400" :
-                l.level === "success" ? "text-green-400" :
-                l.level === "warn" ? "text-yellow-400" :
-                "text-gray-300"
-              }>{l.msg}</span>
-            </div>
-          ))
+      <AnimatePresence>
+        {showImportOptions && pendingImport && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.98 }}
+              className="w-full max-w-2xl bg-[var(--bg)] border border-[var(--border)] rounded-2xl shadow-2xl p-5 space-y-4"
+            >
+              <div>
+                <h3 className="text-lg font-semibold">Import Tasks</h3>
+                <p className="text-sm text-[var(--text-muted)] mt-1">
+                  Choose tracked courses and import rules before tasks are added.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-[var(--border)] p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                    Tracked Courses
+                  </p>
+                  <div className="flex items-center gap-2 text-xs">
+                    <button
+                      onClick={() =>
+                        setSelectedCourseIds(new Set(pendingImport.courses.map((c) => c.id)))
+                      }
+                      className="text-[var(--primary)] hover:underline"
+                    >
+                      Select all
+                    </button>
+                    <button
+                      onClick={() => setSelectedCourseIds(new Set())}
+                      className="text-[var(--text-muted)] hover:underline"
+                    >
+                      Deselect all
+                    </button>
+                  </div>
+                </div>
+                <div className="max-h-44 overflow-y-auto space-y-1">
+                  {pendingImport.courses.map((course) => (
+                    <label
+                      key={course.id}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[var(--bg-card)] cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedCourseIds.has(course.id)}
+                        onChange={() => toggleCourseSelection(course.id)}
+                      />
+                      <span
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{ backgroundColor: course.color || "#6366f1" }}
+                      />
+                      <span className="text-sm text-[var(--text)]">{course.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[var(--border)] p-3 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  Import Rules (new tasks only)
+                </p>
+
+                <label className="space-y-1 block">
+                  <span className="text-sm">Only add tasks due on or after</span>
+                  <input
+                    type="date"
+                    value={onlyAddFromDate}
+                    onChange={(e) => setOnlyAddFromDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  />
+                </label>
+
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={skipNoDueDateTasks}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setSkipNoDueDateTasks(checked);
+                      if (checked) setReviewNoDueDateTasks(false);
+                    }}
+                  />
+                  Do not add tasks with no due date
+                </label>
+
+                <label
+                  className={`flex items-center gap-2 text-sm ${
+                    skipNoDueDateTasks ? "text-[var(--text-muted)]" : ""
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={reviewNoDueDateTasks}
+                    disabled={skipNoDueDateTasks}
+                    onChange={(e) => setReviewNoDueDateTasks(e.target.checked)}
+                  />
+                  Review no due date tasks before adding
+                </label>
+              </div>
+
+              <div className="text-xs text-[var(--text-muted)]">
+                {trackedAssignmentCount} assignment{trackedAssignmentCount === 1 ? "" : "s"} in tracked courses
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={cancelImportFlow}
+                  className="px-4 py-2 rounded-lg border border-[var(--border)] text-sm hover:bg-[var(--bg-card)] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={continueFromImportOptions}
+                  className="px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                >
+                  {reviewNoDueDateTasks && !skipNoDueDateTasks && noDueCandidates.length > 0
+                    ? "Review No Due Tasks"
+                    : "Import Tasks"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
-        <div ref={logsEndRef} />
-      </div>
-    </div>
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showNoDueReview && pendingImport && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.98 }}
+              className="w-full max-w-2xl bg-[var(--bg)] border border-[var(--border)] rounded-2xl shadow-2xl p-5 space-y-4"
+            >
+              <div>
+                <h3 className="text-lg font-semibold">Review No Due Date Tasks</h3>
+                <p className="text-sm text-[var(--text-muted)] mt-1">
+                  Select the no due date tasks you want to add from tracked courses.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[var(--text-muted)]">
+                  {noDueCandidates.length} no due date task{noDueCandidates.length === 1 ? "" : "s"}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      setSelectedNoDueAssignmentIds(new Set(noDueCandidates.map((a) => a.id)))
+                    }
+                    className="text-[var(--primary)] hover:underline"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    onClick={() => setSelectedNoDueAssignmentIds(new Set())}
+                    className="text-[var(--text-muted)] hover:underline"
+                  >
+                    Deselect all
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto rounded-xl border border-[var(--border)] p-2 space-y-1">
+                {noDueCandidates.map((assignment) => (
+                  <label
+                    key={assignment.id}
+                    className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-[var(--bg-card)] cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedNoDueAssignmentIds.has(assignment.id)}
+                      onChange={() => toggleNoDueAssignmentSelection(assignment.id)}
+                      className="mt-0.5"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm text-[var(--text)] truncate">{assignment.name}</p>
+                      <p className="text-xs text-[var(--text-muted)] truncate">
+                        {assignment.course_name || `Course ${assignment.course_id}`}
+                      </p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => {
+                    setShowNoDueReview(false);
+                    setShowImportOptions(true);
+                  }}
+                  className="px-4 py-2 rounded-lg border border-[var(--border)] text-sm hover:bg-[var(--bg-card)] transition-colors"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={finalizeImport}
+                  className="px-4 py-2 rounded-lg bg-[var(--primary)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                >
+                  Import Selected
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
