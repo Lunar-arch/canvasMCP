@@ -293,22 +293,31 @@ export function buildHtmlLoadingShell(options: HtmlLoaderOptions): string {
           }
         }
 
-        async function loadFinalHtml(renderUrl) {
-          setStatus("Sending", "Fetching final app HTML...", 96);
-          appendStreamLine("Fetching final payload", false);
-
-          const response = await fetch(renderUrl, { method: "GET", mode: "cors" });
-          if (!response.ok) {
-            throw new Error("Final payload request failed (" + response.status + ")");
+        function resolveFinalUrl(payload) {
+          if (payload && typeof payload.appUrl === "string" && payload.appUrl) {
+            return payload.appUrl;
           }
 
-          const html = await response.text();
-          setStatus("Sending", "Replacing loader with app content...", 100);
-          appendStreamLine("Payload received, replacing document", false);
+          if (payload && typeof payload.sourcePath === "string" && /^https?:\/\//i.test(payload.sourcePath)) {
+            return payload.sourcePath;
+          }
 
-          document.open();
-          document.write(html);
-          document.close();
+          if (payload && typeof payload.renderUrl === "string" && payload.renderUrl) {
+            return payload.renderUrl;
+          }
+
+          return "";
+        }
+
+        function loadFinalHtml(payload) {
+          const finalUrl = resolveFinalUrl(payload);
+          if (!finalUrl) {
+            throw new Error("Missing final URL in complete event");
+          }
+
+          setStatus("Sending", "Launching app route...", 98);
+          appendStreamLine("Navigating to " + finalUrl, false);
+          window.location.assign(finalUrl);
         }
 
         function connectStream() {
@@ -336,12 +345,13 @@ export function buildHtmlLoadingShell(options: HtmlLoaderOptions): string {
           source.addEventListener("complete", function (event) {
             const payload = JSON.parse(event.data);
             streamFinished = true;
-            const renderUrl = String(payload.renderUrl || "");
             source.close();
             currentEventSource = null;
-            loadFinalHtml(renderUrl).catch(function (error) {
+            try {
+              loadFinalHtml(payload);
+            } catch (error) {
               showError(error instanceof Error ? error.message : String(error));
-            });
+            }
           });
 
           source.addEventListener("fatal", function (event) {

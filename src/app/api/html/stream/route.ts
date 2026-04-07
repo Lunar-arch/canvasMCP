@@ -33,6 +33,7 @@ export function OPTIONS() {
 export async function GET(req: NextRequest) {
   const target = resolveHtmlTarget(req.nextUrl.searchParams.get("target"));
   const renderUrl = `${req.nextUrl.origin}/api/html/render?target=${encodeURIComponent(target)}`;
+  const appUrl = `${req.nextUrl.origin}${target}`;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -77,6 +78,7 @@ export async function GET(req: NextRequest) {
           message: "Ready",
           progress: 100,
           target,
+          appUrl,
           sourceMode: prepared.sourceMode,
           sourcePath: prepared.sourcePath,
           buildId: prepared.buildId,

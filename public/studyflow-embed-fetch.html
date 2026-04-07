@@ -159,14 +159,45 @@
           }
         }
 
-        function loadFinalHtml(renderUrl) {
-          if (!renderUrl) {
-            throw new Error("Missing renderUrl in complete event");
+        function resolveFinalUrl(payload) {
+          if (payload && typeof payload.appUrl === "string" && payload.appUrl) {
+            return payload.appUrl;
           }
 
-          addLog("Navigating iframe to final payload URL");
-          // Use iframe navigation instead of srcdoc so scripts run under the StudyFlow origin.
-          frame.src = renderUrl;
+          if (payload && typeof payload.sourcePath === "string" && /^https?:\/\//i.test(payload.sourcePath)) {
+            return payload.sourcePath;
+          }
+
+          if (payload && typeof payload.renderUrl === "string" && payload.renderUrl) {
+            return payload.renderUrl;
+          }
+
+          return "";
+        }
+
+        function loadFinalHtml(payload) {
+          const finalUrl = resolveFinalUrl(payload);
+          if (!finalUrl) {
+            throw new Error("Missing final URL in complete event");
+          }
+
+          addLog("Navigating iframe to final app URL");
+          phaseEl.textContent = "Launching";
+          messageEl.textContent = "Waiting for app frame to load...";
+          progressBar.style.width = "98%";
+
+          frame.addEventListener(
+            "load",
+            function () {
+              phaseEl.textContent = "Done";
+              messageEl.textContent = "StudyFlow loaded";
+              progressBar.style.width = "100%";
+              addLog("Frame load complete");
+            },
+            { once: true }
+          );
+
+          frame.src = finalUrl;
         }
 
         function startFlow() {
@@ -196,13 +227,9 @@
           eventSource.addEventListener("complete", function (event) {
             const payload = JSON.parse(event.data);
             streamFinished = true;
-            addLog("Fetching final HTML payload");
+            addLog("Preparing final app navigation");
             try {
-              loadFinalHtml(String(payload.renderUrl || ""));
-                phaseEl.textContent = "Done";
-                messageEl.textContent = "StudyFlow loaded";
-                progressBar.style.width = "100%";
-                addLog("Loaded successfully");
+              loadFinalHtml(payload);
             } catch (error) {
               phaseEl.textContent = "Error";
               messageEl.textContent = error instanceof Error ? error.message : String(error);

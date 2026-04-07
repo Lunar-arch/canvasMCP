@@ -30,3 +30,4 @@ Example:
 - CORS headers are enabled on html stream/render routes for cross-origin embedding.
 - For highest fidelity and stable localStorage behavior, prefer iframe loading of /html.
 - The fetch embed template now navigates the iframe to the final `/api/html/render` URL (instead of `srcdoc`) to avoid hydration/CSP issues that can leave the app on its initial loading spinner.
+- The stream `complete` event now includes `appUrl` (the canonical `/`, `/dashboard`, or `/setup` route). Both loader and fetch embed navigate to this URL to ensure Next.js hydrates on a real app route.
