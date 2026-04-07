@@ -248,6 +248,7 @@ export function buildHtmlLoadingShell(options: HtmlLoaderOptions): string {
 
         let currentEventSource = null;
         let activeTarget = INITIAL_TARGET;
+        let streamFinished = false;
 
         function normalizeTarget(input) {
           const value = (input || "").trim().toLowerCase();
@@ -315,6 +316,7 @@ export function buildHtmlLoadingShell(options: HtmlLoaderOptions): string {
           activeTarget = normalizeTarget(params.get("target") || INITIAL_TARGET);
           const encodedTarget = encodeURIComponent(activeTarget);
           const streamUrl = API_BASE + "/api/html/stream?target=" + encodedTarget;
+          streamFinished = false;
 
           setStatus("Initializing", "Connecting to server stream...", 2);
           appendStreamLine("Connecting to " + streamUrl, false);
@@ -333,6 +335,7 @@ export function buildHtmlLoadingShell(options: HtmlLoaderOptions): string {
 
           source.addEventListener("complete", function (event) {
             const payload = JSON.parse(event.data);
+            streamFinished = true;
             const renderUrl = String(payload.renderUrl || "");
             source.close();
             currentEventSource = null;
@@ -348,6 +351,9 @@ export function buildHtmlLoadingShell(options: HtmlLoaderOptions): string {
           });
 
           source.addEventListener("error", function () {
+            if (streamFinished) {
+              return;
+            }
             closeStream();
             showError("Stream disconnected unexpectedly. Retry to reconnect.");
           });

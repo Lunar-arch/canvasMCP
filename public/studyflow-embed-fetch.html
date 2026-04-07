@@ -139,6 +139,7 @@
         const frame = document.getElementById("studyflow-frame");
 
         let eventSource = null;
+        let streamFinished = false;
 
         function normalizeOrigin(value) {
           return String(value || "").trim().replace(/\/+$/, "");
@@ -158,18 +159,20 @@
           }
         }
 
-        async function loadFinalHtml(renderUrl) {
-          const response = await fetch(renderUrl, { method: "GET", mode: "cors" });
-          if (!response.ok) {
-            throw new Error("Render request failed (" + response.status + ")");
+        function loadFinalHtml(renderUrl) {
+          if (!renderUrl) {
+            throw new Error("Missing renderUrl in complete event");
           }
-          const html = await response.text();
-          frame.srcdoc = html;
+
+          addLog("Navigating iframe to final payload URL");
+          // Use iframe navigation instead of srcdoc so scripts run under the StudyFlow origin.
+          frame.src = renderUrl;
         }
 
         function startFlow() {
           closeStream();
           logEl.innerHTML = "";
+          streamFinished = false;
 
           const origin = normalizeOrigin(originInput.value);
           const target = targetSelect.value || "/";
@@ -192,22 +195,21 @@
 
           eventSource.addEventListener("complete", function (event) {
             const payload = JSON.parse(event.data);
+            streamFinished = true;
             addLog("Fetching final HTML payload");
-            loadFinalHtml(String(payload.renderUrl || ""))
-              .then(function () {
+            try {
+              loadFinalHtml(String(payload.renderUrl || ""));
                 phaseEl.textContent = "Done";
                 messageEl.textContent = "StudyFlow loaded";
                 progressBar.style.width = "100%";
                 addLog("Loaded successfully");
-              })
-              .catch(function (error) {
-                phaseEl.textContent = "Error";
-                messageEl.textContent = error instanceof Error ? error.message : String(error);
-                addLog("Error: " + messageEl.textContent);
-              })
-              .finally(function () {
-                closeStream();
-              });
+            } catch (error) {
+              phaseEl.textContent = "Error";
+              messageEl.textContent = error instanceof Error ? error.message : String(error);
+              addLog("Error: " + messageEl.textContent);
+            } finally {
+              closeStream();
+            }
           });
 
           eventSource.addEventListener("fatal", function (event) {
@@ -219,6 +221,9 @@
           });
 
           eventSource.addEventListener("error", function () {
+            if (streamFinished) {
+              return;
+            }
             phaseEl.textContent = "Error";
             messageEl.textContent = "Stream failed";
             addLog("Stream failed");

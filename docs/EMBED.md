@@ -29,3 +29,4 @@ Example:
 - If build artifacts are unavailable (common on serverless runtimes), stream/render automatically fall back to live route capture.
 - CORS headers are enabled on html stream/render routes for cross-origin embedding.
 - For highest fidelity and stable localStorage behavior, prefer iframe loading of /html.
+- The fetch embed template now navigates the iframe to the final `/api/html/render` URL (instead of `srcdoc`) to avoid hydration/CSP issues that can leave the app on its initial loading spinner.
