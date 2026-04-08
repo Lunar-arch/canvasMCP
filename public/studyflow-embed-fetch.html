@@ -175,12 +175,60 @@
           return "";
         }
 
-        function loadFinalHtml(payload) {
-          const finalUrl = resolveFinalUrl(payload);
-          if (!finalUrl) {
-            throw new Error("Missing final URL in complete event");
+        function decodeBase64Utf8(base64Text) {
+          const binary = atob(base64Text);
+          const bytes = new Uint8Array(binary.length);
+
+          for (let i = 0; i < binary.length; i += 1) {
+            bytes[i] = binary.charCodeAt(i);
           }
 
+          return new TextDecoder("utf-8").decode(bytes);
+        }
+
+        function loadFinalHtml(payload) {
+          if (payload && typeof payload.htmlBase64 === "string" && payload.htmlBase64) {
+            if (
+              typeof payload.inlinedScriptCount === "number" ||
+              typeof payload.inlinedStyleCount === "number"
+            ) {
+              addLog(
+                "Inlined assets: " +
+                  String(payload.inlinedScriptCount || 0) +
+                  " scripts, " +
+                  String(payload.inlinedStyleCount || 0) +
+                  " styles"
+              );
+            }
+
+            addLog("Rendering inline HTML payload in iframe");
+            phaseEl.textContent = "Launching";
+            messageEl.textContent = "Applying streamed HTML + JS payload...";
+            progressBar.style.width = "98%";
+
+            frame.addEventListener(
+              "load",
+              function () {
+                phaseEl.textContent = "Done";
+                messageEl.textContent = "StudyFlow loaded from streamed payload";
+                progressBar.style.width = "100%";
+                addLog("Frame load complete");
+              },
+              { once: true }
+            );
+
+            const htmlText = decodeBase64Utf8(payload.htmlBase64);
+            frame.removeAttribute("src");
+            frame.srcdoc = htmlText;
+            return;
+          }
+
+          const finalUrl = resolveFinalUrl(payload);
+          if (!finalUrl) {
+            throw new Error("Missing htmlBase64 and final URL in complete event");
+          }
+
+          addLog("Inline payload missing, falling back to URL navigation");
           addLog("Navigating iframe to final app URL");
           phaseEl.textContent = "Launching";
           messageEl.textContent = "Waiting for app frame to load...";
@@ -197,6 +245,7 @@
             { once: true }
           );
 
+          frame.srcdoc = "";
           frame.src = finalUrl;
         }
 
@@ -207,7 +256,11 @@
 
           const origin = normalizeOrigin(originInput.value);
           const target = targetSelect.value || "/";
-          const streamUrl = origin + "/api/html/stream?target=" + encodeURIComponent(target);
+          const streamUrl =
+            origin +
+            "/api/html/stream?target=" +
+            encodeURIComponent(target) +
+            "&delivery=inline";
 
           phaseEl.textContent = "Initializing";
           messageEl.textContent = "Connecting...";

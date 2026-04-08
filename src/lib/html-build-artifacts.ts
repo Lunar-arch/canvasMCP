@@ -5,6 +5,10 @@ import path from "node:path";
 export type HtmlAppTarget = "/" | "/dashboard" | "/setup";
 export type HtmlSourceMode = "build-artifact" | "live-fetch";
 
+function shouldPreferLiveSource(): boolean {
+  return process.env.NODE_ENV !== "production";
+}
+
 const TARGET_FILE_MAP: Record<HtmlAppTarget, string> = {
   "/": "index.html",
   "/dashboard": "dashboard.html",
@@ -306,6 +310,10 @@ async function prepareLiveHtmlDocument(
 }
 
 export async function detectHtmlSourceMode(rawTarget?: string | null): Promise<HtmlSourceMode> {
+  if (shouldPreferLiveSource()) {
+    return "live-fetch";
+  }
+
   try {
     await getBuildArtifactInfo(rawTarget);
     return "build-artifact";
@@ -318,6 +326,22 @@ export async function prepareHtmlDocument(
   origin: string,
   rawTarget?: string | null
 ): Promise<PreparedHtmlArtifact> {
+  if (shouldPreferLiveSource()) {
+    try {
+      return await prepareLiveHtmlDocument(origin, rawTarget);
+    } catch (liveError) {
+      try {
+        return await prepareBuiltHtmlDocument(origin, rawTarget);
+      } catch (buildError) {
+        const liveMessage = liveError instanceof Error ? liveError.message : String(liveError);
+        const buildMessage = buildError instanceof Error ? buildError.message : String(buildError);
+        throw new Error(
+          `Unable to prepare HTML payload from live fetch or build artifact. Live error: ${liveMessage}. Build error: ${buildMessage}`
+        );
+      }
+    }
+  }
+
   try {
     return await prepareBuiltHtmlDocument(origin, rawTarget);
   } catch (buildError) {
