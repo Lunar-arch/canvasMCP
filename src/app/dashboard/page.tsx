@@ -256,7 +256,7 @@ export default function DashboardPage() {
     setShowAddDropdown(false);
   }, [quickTitle, createBlock, data.blocks.length]);
 
-  const handleQuickKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleQuickKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       handleQuickAddTask({ openEditor: true });
@@ -271,7 +271,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleQuickTaskOnlyKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleQuickTaskOnlyKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
       handleQuickAddTask({ openEditor: e.ctrlKey || e.metaKey });
@@ -280,45 +280,39 @@ export default function DashboardPage() {
     }
   };
 
-  const handleQuickPaste = useCallback(
-    (e: React.ClipboardEvent<HTMLInputElement>) => {
-      // Always take control of paste so we can split multi-item content
-      e.preventDefault();
-      const text = e.clipboardData.getData("text/plain");
-      if (!text) return;
+  const handleQuickChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const val = e.target.value;
+      const hasTabs = val.includes("\t");
+      const hasNewlines = /[\n\r]/.test(val);
 
-      const rows = text.split(/\r?\n/).map((r) => r.trim()).filter(Boolean);
-      const hasTabs = /\t/.test(text);
+      if (!hasTabs && !hasNewlines) {
+        setQuickTitle(val);
+        return;
+      }
 
+      // Multi-line or tabbed — parse into task titles
+      const rows = val.split(/\r?\n/).map((r) => r.trim()).filter(Boolean);
       let titles: string[];
 
       if (hasTabs && rows.length === 1) {
-        // Single-row TSV (e.g. one Google Sheets row copied across columns)
         titles = rows[0].split("\t").map((s) => s.trim()).filter(Boolean);
-      } else if (hasTabs && rows.length > 1) {
-        // Multi-row TSV: use first column of each row as the task title
+      } else if (hasTabs) {
         titles = rows.map((r) => r.split("\t")[0].trim()).filter(Boolean);
       } else {
-        // Plain text / bullet list — strip leading bullet characters
         titles = rows
-          .map((l) => l.replace(/^[-*•◦▪▸►>\u2022\u2023\u25E6\u2043\[\]]+\s*/, "").trim())
+          .map((l) => l.replace(/^[-*•◦▪▸►>\u2022\u2023\u25E6\u2043[\]]+\s*/, "").trim())
           .filter(Boolean);
       }
 
       if (titles.length >= 2) {
-        // Multi-item paste → create a task per item immediately
         titles.forEach((title) => createTask({ title }));
         setQuickTitle("");
       } else {
-        // Single item → insert at cursor like a normal paste
-        const input = e.currentTarget;
-        const val = titles[0] ?? text.trim();
-        const start = input.selectionStart ?? quickTitle.length;
-        const end = input.selectionEnd ?? quickTitle.length;
-        setQuickTitle(quickTitle.slice(0, start) + val + quickTitle.slice(end));
+        setQuickTitle((titles[0] ?? val).replace(/[\n\r\t]/g, " ").trim());
       }
     },
-    [createTask, quickTitle]
+    [createTask]
   );
 
   // Selection handler
@@ -596,13 +590,14 @@ export default function DashboardPage() {
                 </Link>
 
                 <div className="w-full sm:w-auto sm:min-w-[360px] max-w-lg flex items-center gap-2">
-                  <input
-                    type="text"
+                  <textarea
+                    rows={1}
                     value={quickTitle}
-                    onChange={(e) => setQuickTitle(e.target.value)}
+                    onChange={handleQuickChange}
                     onKeyDown={handleQuickTaskOnlyKeyDown}
                     placeholder="Add a task... (Ctrl+Enter to edit)"
-                    className="flex-1 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)] placeholder:text-[var(--text-muted)]"
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)] placeholder:text-[var(--text-muted)] resize-none overflow-hidden"
+                    style={{ height: "40px" }}
                   />
                   <button
                     onClick={() => handleQuickAddTask()}
@@ -626,13 +621,14 @@ export default function DashboardPage() {
             <>
               {/* Quick-add bar */}
               <div className="flex items-center gap-2 mb-6">
-                <input
-                  type="text"
+                <textarea
+                  rows={1}
                   value={quickTitle}
-                  onChange={(e) => setQuickTitle(e.target.value)}
+                  onChange={handleQuickChange}
                   onKeyDown={handleQuickKeyDown}
                   placeholder="Add a task... (Ctrl+Enter to edit, Shift+Enter for block)"
-                  className="flex-1 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)] placeholder:text-[var(--text-muted)]"
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)] placeholder:text-[var(--text-muted)] resize-none overflow-hidden"
+                  style={{ height: "40px" }}
                 />
                 <div className="relative" ref={addDropdownRef}>
                   <button
