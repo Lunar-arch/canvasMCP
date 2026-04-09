@@ -10,6 +10,8 @@ import { CalendarView } from "@/components/CalendarView";
 import { FilterPanel } from "@/components/FilterPanel";
 import { FocusMode } from "@/components/FocusMode";
 import { TaskEditModal } from "@/components/TaskEditModal";
+import { CustomSelect } from "@/components/ui/CustomSelect";
+import { TagEditor } from "@/components/ui/TagEditor";
 import { cn } from "@/lib/cn";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -23,10 +25,15 @@ import {
   Loader2,
   ArrowLeft,
   ChevronDown,
+  ChevronUp,
   Trash2,
   CheckCircle2,
   X,
   Layers,
+  Clock,
+  CalendarDays,
+  MoveRight,
+  Tag as TagIcon,
 } from "lucide-react";
 import {
   DndContext,
@@ -139,6 +146,11 @@ export default function DashboardPage() {
   // Selection state
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+  const [bulkExpanded, setBulkExpanded] = useState(false);
+  // Bulk task-option state (persists while panel is open)
+  const [bulkPriority, setBulkPriority] = useState<string>("");
+  const [bulkDueDate, setBulkDueDate] = useState("");
+  const [bulkDuration, setBulkDuration] = useState("");
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -357,6 +369,28 @@ export default function DashboardPage() {
   const bulkComplete = () => {
     selectedTaskIds.forEach((id) => completeTask(id));
     clearSelection();
+  };
+
+  const bulkMoveToBlock = (blockId: string) => {
+    selectedTaskIds.forEach((id) => moveTaskToBlock(id, blockId === "" ? undefined : blockId));
+  };
+
+  const bulkSetDueDate = (dateStr: string) => {
+    const iso = dateStr ? new Date(dateStr).toISOString() : null;
+    selectedTaskIds.forEach((id) => updateTask(id, { dueAt: iso }));
+  };
+
+  const bulkSetDuration = (minutes: number) => {
+    const secs = minutes > 0 ? minutes * 60 : undefined;
+    selectedTaskIds.forEach((id) => updateTask(id, { secondsRemaining: secs }));
+  };
+
+  const bulkAddTag = (tagId: string) => {
+    selectedTaskIds.forEach((id) => addTagToTask(id, tagId));
+  };
+
+  const bulkRemoveTag = (tagId: string) => {
+    selectedTaskIds.forEach((id) => removeTagFromTask(id, tagId));
   };
 
   const bulkDelete = () => {
@@ -626,7 +660,7 @@ export default function DashboardPage() {
                   value={quickTitle}
                   onChange={handleQuickChange}
                   onKeyDown={handleQuickKeyDown}
-                  placeholder="Add a task... (Ctrl+Enter to edit, Shift+Enter for block)"
+                  placeholder="Add a task... (Enter to add · Ctrl+Enter to edit · Shift+Enter for block)"
                   className="flex-1 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-card)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)] placeholder:text-[var(--text-muted)] resize-none overflow-hidden"
                   style={{ height: "40px" }}
                 />
@@ -704,18 +738,6 @@ export default function DashboardPage() {
                     />
                   ))}
 
-                  {/* New block button */}
-                  <button
-                    onClick={() => {
-                      const name = `Block ${data.blocks.length + 1}`;
-                      createBlock(name, BLOCK_COLORS[data.blocks.length % BLOCK_COLORS.length]);
-                    }}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border-2 border-dashed border-[var(--border)] text-sm text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
-                  >
-                    <Layers className="w-4 h-4" />
-                    New Block
-                  </button>
-
                   {/* Unblocked tasks */}
                   <DroppableUnblocked>
                     {data.blocks.length > 0 && unblockedTasks.length > 0 && (
@@ -780,65 +802,206 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Bulk edit panel — fixed in left margin when tasks are selected */}
+      {/* Bulk edit panel — bottom-left bar (centered on mobile) */}
       <AnimatePresence>
-        {selectedTaskIds.size > 0 && (
-          <motion.div
-            initial={{ opacity: 0, x: -16 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -16 }}
-            className="fixed left-4 top-1/2 -translate-y-1/2 z-50 bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-2xl p-3 flex flex-col gap-2 w-44"
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-semibold text-[var(--text-secondary)]">
-                {selectedTaskIds.size} selected
-              </span>
-              <button
-                onClick={clearSelection}
-                className="p-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-muted)]"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
+        {selectedTaskIds.size > 0 && (() => {
+          // Compute common tags (intersection across all selected tasks)
+          const selectedTasks = data.tasks.filter((t) => selectedTaskIds.has(t.id));
+          const commonTagIds = selectedTasks.reduce<string[]>((acc, t, i) =>
+            i === 0 ? [...t.tags] : acc.filter((id) => t.tags.includes(id)),
+          []);
+          const commonTags = data.tags.filter((t) => commonTagIds.includes(t.id));
 
-            <button
-              onClick={bulkComplete}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--bg-hover)] transition-colors w-full text-left"
+          const priorityOptions = [
+            { value: "none", label: "None", color: "#cbd5e1" },
+            { value: "low", label: "Low", color: "#94a3b8" },
+            { value: "medium", label: "Medium", color: "#f59e0b" },
+            { value: "high", label: "High", color: "#f97316" },
+            { value: "urgent", label: "Urgent", color: "#ef4444" },
+          ];
+
+          const blockOptions = [
+            { value: "", label: "Unblocked" },
+            ...data.blocks.map((b) => ({ value: b.id, label: b.name, color: b.color })),
+          ];
+
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 16 }}
+              className="fixed bottom-4 left-1/2 -translate-x-1/2 sm:left-4 sm:translate-x-0 z-50 flex flex-col items-stretch w-72"
             >
-              <CheckCircle2 className="w-4 h-4 text-[var(--success)]" />
-              Complete all
-            </button>
-
-            <button
-              onClick={bulkDelete}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-red-50 text-[var(--danger)] transition-colors w-full text-left"
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete all
-            </button>
-
-            <div className="border-t border-[var(--border)] pt-2 mt-1">
-              <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mb-1.5 px-1">Set priority</p>
-              <div className="flex flex-col gap-1">
-                {([null, "low", "medium", "high", "urgent"] as StudyTask["priority"][]).map((p) => (
-                  <button
-                    key={String(p)}
-                    onClick={() => bulkSetPriority(p)}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs hover:bg-[var(--bg-hover)] transition-colors text-left"
+              {/* Expanded options — slides up above the bar */}
+              <AnimatePresence>
+                {bulkExpanded && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, height: 0 }}
+                    animate={{ opacity: 1, y: 0, height: "auto" }}
+                    exit={{ opacity: 0, y: 8, height: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="overflow-hidden"
                   >
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{
-                        backgroundColor: p === null ? "#cbd5e1" : p === "low" ? "#94a3b8" : p === "medium" ? "#f59e0b" : p === "high" ? "#f97316" : "#ef4444",
-                      }}
-                    />
-                    {p === null ? "None" : p.charAt(0).toUpperCase() + p.slice(1)}
-                  </button>
-                ))}
+                    <div className="bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-2xl p-3 flex flex-col gap-1 mb-2 max-h-[70vh] overflow-y-auto">
+
+                      {/* ── Actions ── */}
+                      <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider px-1 pt-1 pb-0.5">
+                        Actions
+                      </p>
+
+                      <button
+                        onClick={bulkComplete}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-[var(--bg-hover)] transition-colors w-full text-left"
+                      >
+                        <CheckCircle2 className="w-4 h-4 text-[var(--success)] shrink-0" />
+                        Complete all
+                      </button>
+
+                      <button
+                        onClick={bulkDelete}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-red-50 text-[var(--danger)] transition-colors w-full text-left"
+                      >
+                        <Trash2 className="w-4 h-4 shrink-0" />
+                        Delete all
+                      </button>
+
+                      {data.blocks.length > 0 && (
+                        <div className="flex items-center gap-2 px-1 py-1">
+                          <MoveRight className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+                          <span className="text-sm text-[var(--text-secondary)] shrink-0">Move to</span>
+                          <CustomSelect
+                            value=""
+                            onChange={(v) => bulkMoveToBlock(v)}
+                            options={blockOptions}
+                            placeholder="Block..."
+                            size="sm"
+                            className="flex-1 min-w-0"
+                          />
+                        </div>
+                      )}
+
+                      {/* ── Divider ── */}
+                      <div className="border-t border-[var(--border)] my-1" />
+
+                      {/* ── Task Options ── */}
+                      <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider px-1 pb-0.5">
+                        Task Options
+                      </p>
+
+                      {/* Priority */}
+                      <div className="flex items-center gap-2 px-1">
+                        <span className="text-xs text-[var(--text-secondary)] w-16 shrink-0">Priority</span>
+                        <CustomSelect
+                          value={bulkPriority}
+                          onChange={(v) => {
+                            setBulkPriority(v);
+                            bulkSetPriority(v === "none" ? null : v as StudyTask["priority"]);
+                          }}
+                          options={priorityOptions}
+                          placeholder="Set priority..."
+                          size="sm"
+                          className="flex-1"
+                        />
+                      </div>
+
+                      {/* Due Date */}
+                      <div className="flex items-center gap-2 px-1">
+                        <span className="text-xs text-[var(--text-secondary)] w-16 shrink-0 flex items-center gap-1">
+                          <CalendarDays className="w-3.5 h-3.5 shrink-0" />
+                          Due
+                        </span>
+                        <input
+                          type="date"
+                          value={bulkDueDate}
+                          onChange={(e) => {
+                            setBulkDueDate(e.target.value);
+                            bulkSetDueDate(e.target.value);
+                          }}
+                          className="flex-1 text-xs px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                        />
+                      </div>
+
+                      {/* Duration */}
+                      <div className="flex items-center gap-2 px-1">
+                        <span className="text-xs text-[var(--text-secondary)] w-16 shrink-0 flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 shrink-0" />
+                          Duration
+                        </span>
+                        <div className="flex items-center gap-1 flex-1">
+                          <input
+                            type="number"
+                            value={bulkDuration}
+                            min={0}
+                            step={5}
+                            placeholder="0"
+                            onChange={(e) => setBulkDuration(e.target.value)}
+                            onBlur={(e) => {
+                              const mins = Number(e.target.value);
+                              if (!isNaN(mins)) bulkSetDuration(mins);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                const mins = Number(bulkDuration);
+                                if (!isNaN(mins)) bulkSetDuration(mins);
+                              }
+                            }}
+                            className="flex-1 text-xs px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                          />
+                          <span className="text-xs text-[var(--text-muted)] shrink-0">min</span>
+                        </div>
+                      </div>
+
+                      {/* Tags */}
+                      <div className="px-1 space-y-1">
+                        <span className="text-xs text-[var(--text-secondary)] flex items-center gap-1">
+                          <TagIcon className="w-3.5 h-3.5 shrink-0" />
+                          Tags
+                        </span>
+                        <TagEditor
+                          tags={commonTags}
+                          allTags={data.tags}
+                          onAddTag={bulkAddTag}
+                          onRemoveTag={bulkRemoveTag}
+                          onCreateTag={createTag}
+                        />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Collapsed bar */}
+              <div className="flex items-center bg-[var(--bg-card)] border border-[var(--border)] rounded-2xl shadow-2xl px-3 py-2 gap-2">
+                <button
+                  onClick={() => setBulkExpanded((e) => !e)}
+                  className="flex items-center gap-2 flex-1 text-left hover:opacity-80 transition-opacity"
+                >
+                  {bulkExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+                  ) : (
+                    <ChevronUp className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
+                  )}
+                  <span className="text-xs font-semibold text-[var(--text-secondary)]">
+                    {selectedTaskIds.size} task{selectedTaskIds.size !== 1 ? "s" : ""} selected
+                  </span>
+                </button>
+                <button
+                  onClick={() => {
+                    clearSelection();
+                    setBulkExpanded(false);
+                    setBulkPriority("");
+                    setBulkDueDate("");
+                    setBulkDuration("");
+                  }}
+                  className="p-1 rounded-lg hover:bg-[var(--bg-hover)] transition-colors text-[var(--text-muted)] shrink-0"
+                  aria-label="Clear selection"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
 
       {/* Task edit modal */}

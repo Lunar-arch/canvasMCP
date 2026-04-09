@@ -76,6 +76,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { CustomSelect } from "@/components/ui/CustomSelect";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,6 +138,52 @@ const CANVAS_DEFAULT_CREDS = (): MacroCredential[] => [
   { id: uuid(), key: "username", label: "Username / Email", value: "", isSecret: false },
   { id: uuid(), key: "password", label: "Password", value: "", isSecret: true },
   { id: uuid(), key: "portalUrl", label: "Login Portal URL", value: "", isSecret: false },
+];
+
+// ─── School Presets ───────────────────────────────────────────────────────────
+
+interface SchoolPreset {
+  label: string;
+  schoolName: string;
+  portalUrl: string;
+  steps: () => MacroStep[];
+  creds: () => MacroCredential[];
+}
+
+const ALLEN_ISD_PRESET_STEPS = (): MacroStep[] => {
+  const ifId = uuid();
+  return [
+    { id: uuid(), action: "navigate", url: "{{portalUrl}}", label: "Go to login portal" },
+    { id: uuid(), action: "wait", waitType: "url", waitUrl: "https://aisd-tx.us001-rapididentity.com/idp/AuthnEngine#/authn", label: "" },
+    { id: uuid(), action: "wait", waitType: "selector", waitSelector: "#identification", label: "" },
+    { id: uuid(), action: "fill", selector: "#identification", value: "{{username}}", label: "Enter username" },
+    { id: uuid(), action: "click", selector: "#authn-go-button", label: "" },
+    { id: uuid(), action: "wait", waitType: "selector", waitSelector: "#ember564", label: "" },
+    { id: uuid(), action: "fill", selector: "#ember564", value: "{{password}}", label: "Enter password" },
+    { id: uuid(), action: "wait", waitType: "selector", waitSelector: "#authn-go-button", label: "" },
+    { id: uuid(), action: "wait", waitType: "duration", waitTime: 1000, label: "" },
+    { id: uuid(), action: "click", selector: "#authn-go-button", label: "Click login button" },
+    { id: ifId, action: "if", ifConditionType: "elementExists", ifTarget: "#authn-go-button", label: "If block" },
+    { id: uuid(), action: "click", selector: "#authn-go-button", label: "", parentIfId: ifId },
+    { id: uuid(), action: "wait", waitType: "url", waitUrl: "https://aisd-tx.us001-rapididentity.com/p/portal", label: "" },
+    { id: uuid(), action: "wait", waitType: "selector", waitSelector: "#ember21", label: "" },
+    { id: uuid(), action: "click", selector: "#ember21", label: "" },
+    { id: uuid(), action: "wait", waitType: "url", waitUrl: "https://allenisd.instructure.com/?login_success=1", label: "Wait for page to load" },
+  ];
+};
+
+const SCHOOL_PRESETS: SchoolPreset[] = [
+  {
+    label: "Allen ISD",
+    schoolName: "allenisd",
+    portalUrl: "https://portal.allenisd.org",
+    steps: ALLEN_ISD_PRESET_STEPS,
+    creds: () => [
+      { id: uuid(), key: "username", label: "Username / Email", value: "", isSecret: false },
+      { id: uuid(), key: "password", label: "Password", value: "", isSecret: true },
+      { id: uuid(), key: "portalUrl", label: "Login Portal URL", value: "https://portal.allenisd.org", isSecret: false },
+    ],
+  },
 ];
 
 // ─── Input helper ─────────────────────────────────────────────────────────────
@@ -242,18 +289,13 @@ function SortableStep({
 
       <div className="flex-1 space-y-2 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--bg)] border border-[var(--border)] text-xs shrink-0">
-            <Icon className="w-3 h-3 text-[var(--text-muted)]" />
-            <select
-              value={step.action}
-              onChange={(e) => updateStep(step.id, { action: e.target.value as MacroStep["action"] })}
-              className="bg-transparent outline-none text-xs cursor-pointer"
-            >
-              {ACTION_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
+          <CustomSelect
+            size="sm"
+            value={step.action}
+            onChange={(v) => updateStep(step.id, { action: v as MacroStep["action"] })}
+            options={ACTION_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            className="shrink-0 w-36"
+          />
           <input
             type="text"
             value={labelValue}
@@ -284,19 +326,13 @@ function SortableStep({
             <div className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-2.5 space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs text-[var(--text-muted)]">If</span>
-                <select
+                <CustomSelect
+                  size="sm"
                   value={ifConditionType}
-                  onChange={(e) =>
-                    updateStep(step.id, {
-                      ifConditionType: e.target.value as MacroIfConditionType,
-                    })
-                  }
-                  className="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                >
-                  {IF_CONDITION_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                  onChange={(v) => updateStep(step.id, { ifConditionType: v as MacroIfConditionType })}
+                  options={IF_CONDITION_OPTIONS}
+                  className="w-52"
+                />
               </div>
 
               {(ifConditionType === "urlIncludes" || ifConditionType === "urlMatches") && (
@@ -397,15 +433,13 @@ function SortableStep({
           )}
           {step.action === "wait" && (
             <div className="flex items-center gap-2 flex-wrap w-full">
-              <select
+              <CustomSelect
+                size="sm"
                 value={step.waitType || "navigation"}
-                onChange={(e) => updateStep(step.id, { waitType: e.target.value as WaitType })}
-                className="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-              >
-                {WAIT_TYPE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
+                onChange={(v) => updateStep(step.id, { waitType: v as WaitType })}
+                options={WAIT_TYPE_OPTIONS}
+                className="w-48"
+              />
               {step.waitType === "url" && (
                 <Input
                   value={step.waitUrl || ""}
@@ -1015,25 +1049,21 @@ function FieldMappingsTab({
                   mono
                   className="flex-1 min-w-[180px]"
                 />
-                <select
+                <CustomSelect
+                  size="sm"
                   value={m.attribute}
-                  onChange={(e) => update(m.id, { attribute: e.target.value as FieldMapping["attribute"] })}
-                  className="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-xs focus:outline-none"
-                >
-                  {(["textContent", "href", "value", "innerHTML", "src"] as const).map((a) => (
-                    <option key={a} value={a}>{a}</option>
-                  ))}
-                </select>
+                  onChange={(v) => update(m.id, { attribute: v as FieldMapping["attribute"] })}
+                  options={(["textContent", "href", "value", "innerHTML", "src"] as const).map((a) => ({ value: a, label: a }))}
+                  className="w-32"
+                />
                 <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
-                <select
+                <CustomSelect
+                  size="sm"
                   value={m.taskField}
-                  onChange={(e) => update(m.id, { taskField: e.target.value as FieldMapping["taskField"] })}
-                  className="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-xs focus:outline-none"
-                >
-                  {TASK_FIELDS.map((f) => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </select>
+                  onChange={(v) => update(m.id, { taskField: v as FieldMapping["taskField"] })}
+                  options={TASK_FIELDS}
+                  className="w-40"
+                />
                 <button
                   onClick={() => remove(m.id)}
                   className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
@@ -1137,15 +1167,12 @@ function ScheduleTab({
       {(s.type === "daily" || s.type === "weekly") && (
         <div className="flex items-center gap-3 pt-2">
           {s.type === "weekly" && (
-            <select
-              value={s.dayOfWeek ?? 1}
-              onChange={(e) => set({ dayOfWeek: Number(e.target.value) })}
-              className="px-2.5 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-            >
-              {days.map((d, i) => (
-                <option key={d} value={i}>{d}</option>
-              ))}
-            </select>
+            <CustomSelect
+              value={String(s.dayOfWeek ?? 1)}
+              onChange={(v) => set({ dayOfWeek: Number(v) })}
+              options={days.map((d, i) => ({ value: String(i), label: d }))}
+              className="w-36"
+            />
           )}
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-[var(--text-muted)]" />
@@ -2362,15 +2389,28 @@ function NewMacroModal({
   const [name, setName] = useState("");
   const [sourceType, setSourceType] = useState<"canvas" | "generic">("canvas");
   const [schoolName, setSchoolName] = useState("");
+  const [selectedPreset, setSelectedPreset] = useState<string>("");
+
+  const applyPreset = (presetLabel: string) => {
+    setSelectedPreset(presetLabel);
+    const preset = SCHOOL_PRESETS.find((p) => p.label === presetLabel);
+    if (preset) {
+      setName(preset.label);
+      setSchoolName(preset.schoolName);
+    } else {
+      setSchoolName("");
+    }
+  };
 
   const submit = () => {
     if (!name.trim()) return;
+    const preset = SCHOOL_PRESETS.find((p) => p.label === selectedPreset);
     onCreate({
       name: name.trim(),
       sourceType,
       schoolName: sourceType === "canvas" ? schoolName.trim() : undefined,
-      steps: sourceType === "canvas" ? CANVAS_DEFAULT_STEPS() : [],
-      credentials: sourceType === "canvas" ? CANVAS_DEFAULT_CREDS() : [],
+      steps: sourceType === "canvas" ? (preset ? preset.steps() : CANVAS_DEFAULT_STEPS()) : [],
+      credentials: sourceType === "canvas" ? (preset ? preset.creds() : CANVAS_DEFAULT_CREDS()) : [],
     });
     onClose();
   };
@@ -2428,19 +2468,40 @@ function NewMacroModal({
           </div>
 
           {sourceType === "canvas" && (
-            <label className="block space-y-1">
-              <span className="text-sm text-[var(--text-muted)]">School subdomain</span>
-              <div className="flex items-center gap-1">
-                <input
-                  type="text"
-                  value={schoolName}
-                  onChange={(e) => setSchoolName(e.target.value)}
-                  placeholder="yourschool"
-                  className="flex-1 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)] font-mono"
+            <>
+              <label className="block space-y-1">
+                <span className="text-sm text-[var(--text-muted)]">School Preset</span>
+                <CustomSelect
+                  value={selectedPreset}
+                  onChange={applyPreset}
+                  placeholder="— Custom (manual setup) —"
+                  options={[
+                    { value: "", label: "— Custom (manual setup) —" },
+                    ...SCHOOL_PRESETS.map((p) => ({ value: p.label, label: p.label })),
+                  ]}
+                  className="w-full"
                 />
-                <span className="text-sm text-[var(--text-muted)]">.instructure.com</span>
-              </div>
-            </label>
+                {selectedPreset && (
+                  <p className="text-xs text-[var(--text-muted)] mt-1">
+                    Pre-filled with {selectedPreset} login steps. You can edit them after creating.
+                  </p>
+                )}
+              </label>
+
+              <label className="block space-y-1">
+                <span className="text-sm text-[var(--text-muted)]">School subdomain</span>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={schoolName}
+                    onChange={(e) => setSchoolName(e.target.value)}
+                    placeholder="yourschool"
+                    className="flex-1 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)] font-mono"
+                  />
+                  <span className="text-sm text-[var(--text-muted)]">.instructure.com</span>
+                </div>
+              </label>
+            </>
           )}
         </div>
 

@@ -23,14 +23,14 @@ interface ColorSwatchProps {
 
 export function ColorSwatch({ value, onChange, className }: ColorSwatchProps) {
   return (
-    <div className={cn("flex items-center gap-1.5", className)}>
+    <div className={cn("flex flex-nowrap items-center gap-1.5", className)}>
       {SWATCH_COLORS.map((c) => (
         <button
           key={c}
           type="button"
           onClick={() => onChange(c)}
           className={cn(
-            "w-5 h-5 rounded-full transition-transform hover:scale-110 cursor-pointer shrink-0",
+            "w-5 h-5 rounded-full transition-transform hover:scale-110 cursor-pointer shrink-0 flex-none",
             value === c && "ring-2 ring-offset-1 ring-current"
           )}
           style={{ backgroundColor: c, color: c }}

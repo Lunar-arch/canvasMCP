@@ -17,6 +17,8 @@ interface CustomSelectProps {
   options: SelectOption[];
   placeholder?: string;
   className?: string;
+  /** "sm" renders a compact variant (text-xs, tighter padding, rounded-lg) */
+  size?: "default" | "sm";
 }
 
 type SelectPos = {
@@ -33,6 +35,7 @@ export function CustomSelect({
   options,
   placeholder = "Select...",
   className,
+  size = "default",
 }: CustomSelectProps) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<SelectPos>({ top: 0, left: 0, width: 0, openUp: false, maxHeight: 208 });
@@ -173,7 +176,12 @@ export function CustomSelect({
         type="button"
         onClick={() => (open ? close() : openDropdown())}
         onKeyDown={handleKeyDown}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-sm hover:bg-[var(--bg-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] transition-colors cursor-pointer text-left"
+        className={cn(
+          "w-full flex items-center justify-between gap-2 border border-[var(--border)] bg-[var(--bg)] hover:bg-[var(--bg-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] transition-colors cursor-pointer text-left",
+          size === "sm"
+            ? "px-2.5 py-1.5 rounded-lg text-xs"
+            : "px-3 py-2 rounded-xl text-sm"
+        )}
         aria-haspopup="listbox"
         aria-expanded={open}
       >

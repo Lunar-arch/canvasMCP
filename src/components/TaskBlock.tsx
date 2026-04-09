@@ -12,7 +12,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { ColorSwatch } from "./ui/ColorSwatch";
 import { CustomSelect } from "./ui/CustomSelect";
 import { Dropdown } from "./ui/Dropdown";
-import { TagList } from "./ui/TagList";
+import { TagEditor } from "./ui/TagEditor";
 
 function SortableTaskItem({
   task,
@@ -295,27 +295,24 @@ export function TaskBlockComponent({
             )}
 
             {/* Add tag to all tasks */}
-            {tags.length > 0 && (
-              <div>
-                <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Tags for block tasks</p>
-                <TagList
-                  taskTags={tagsInBlock}
-                  availableTags={tags}
-                  onRemoveTag={(tagId) => {
-                    tasks.forEach((t) => {
-                      if (t.tags.includes(tagId)) onRemoveTag(t.id, tagId);
-                    });
-                  }}
-                  onAddTag={(tagId) => {
-                    tasks.forEach((t) => {
-                      if (!t.tags.includes(tagId)) onAddTag(t.id, tagId);
-                    });
-                  }}
-                  onCreateTag={onCreateTag}
-                  showCreateRow={Boolean(onCreateTag)}
-                />
-              </div>
-            )}
+            <div>
+              <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1.5">Tags for block tasks</p>
+              <TagEditor
+                tags={tagsInBlock}
+                allTags={tags}
+                onRemoveTag={(tagId) => {
+                  tasks.forEach((t) => {
+                    if (t.tags.includes(tagId)) onRemoveTag(t.id, tagId);
+                  });
+                }}
+                onAddTag={(tagId) => {
+                  tasks.forEach((t) => {
+                    if (!t.tags.includes(tagId)) onAddTag(t.id, tagId);
+                  });
+                }}
+                onCreateTag={onCreateTag}
+              />
+            </div>
 
             {/* Delete */}
             <div className="border-t border-[var(--border)] pt-2">

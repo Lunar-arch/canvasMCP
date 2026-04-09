@@ -6,7 +6,8 @@
       "Bash(rm -rf canvasMCP/node_modules canvasMCP/dist canvasMCP/package canvasMCP/src canvasMCP/package.json canvasMCP/package-lock.json canvasMCP/tsconfig.json canvasMCP/.env.example)",
       "mcp__Claude_Preview__preview_start",
       "Bash(taskkill //F //IM node.exe)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
