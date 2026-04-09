@@ -282,35 +282,43 @@ export default function DashboardPage() {
 
   const handleQuickPaste = useCallback(
     (e: React.ClipboardEvent<HTMLInputElement>) => {
-      const text = e.clipboardData.getData("text");
-      const hasNewlines = /\r?\n/.test(text.trim());
+      // Always take control of paste so we can split multi-item content
+      e.preventDefault();
+      const text = e.clipboardData.getData("text/plain");
+      if (!text) return;
+
+      const rows = text.split(/\r?\n/).map((r) => r.trim()).filter(Boolean);
       const hasTabs = /\t/.test(text);
 
-      let titles: string[] = [];
+      let titles: string[];
 
-      if (hasTabs) {
-        const rows = text.split(/\r?\n/).filter((r) => r.trim());
-        if (rows.length > 1) {
-          // Multi-row TSV (Google Sheets multi-row): first column of each row = task
-          titles = rows.map((r) => r.split("\t")[0].trim()).filter(Boolean);
-        } else {
-          // Single-row TSV (Google Sheets single row): each cell = task
-          titles = text.split("\t").map((s) => s.trim()).filter(Boolean);
-        }
-      } else if (hasNewlines) {
-        // Plain multi-line text or bullet list
-        titles = text
-          .split(/\r?\n/)
-          .map((l) => l.replace(/^[\s]*[-*•◦▪▸►>\u2022\u2023\u25E6\u2043]+\s*/, "").trim())
+      if (hasTabs && rows.length === 1) {
+        // Single-row TSV (e.g. one Google Sheets row copied across columns)
+        titles = rows[0].split("\t").map((s) => s.trim()).filter(Boolean);
+      } else if (hasTabs && rows.length > 1) {
+        // Multi-row TSV: use first column of each row as the task title
+        titles = rows.map((r) => r.split("\t")[0].trim()).filter(Boolean);
+      } else {
+        // Plain text / bullet list — strip leading bullet characters
+        titles = rows
+          .map((l) => l.replace(/^[-*•◦▪▸►>\u2022\u2023\u25E6\u2043\[\]]+\s*/, "").trim())
           .filter(Boolean);
       }
 
-      if (titles.length < 2) return; // single item — let browser handle normally
-      e.preventDefault();
-      titles.forEach((title) => createTask({ title }));
-      setQuickTitle("");
+      if (titles.length >= 2) {
+        // Multi-item paste → create a task per item immediately
+        titles.forEach((title) => createTask({ title }));
+        setQuickTitle("");
+      } else {
+        // Single item → insert at cursor like a normal paste
+        const input = e.currentTarget;
+        const val = titles[0] ?? text.trim();
+        const start = input.selectionStart ?? quickTitle.length;
+        const end = input.selectionEnd ?? quickTitle.length;
+        setQuickTitle(quickTitle.slice(0, start) + val + quickTitle.slice(end));
+      }
     },
-    [createTask]
+    [createTask, quickTitle]
   );
 
   // Selection handler
