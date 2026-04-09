@@ -283,13 +283,31 @@ export default function DashboardPage() {
   const handleQuickPaste = useCallback(
     (e: React.ClipboardEvent<HTMLInputElement>) => {
       const text = e.clipboardData.getData("text");
-      const lines = text
-        .split(/\r?\n/)
-        .map((l) => l.replace(/^[\s\t]*[-*•◦▪▸►>]+\s*/, "").trim())
-        .filter(Boolean);
-      if (lines.length <= 1) return; // single line — let browser handle normally
+      const hasNewlines = /\r?\n/.test(text.trim());
+      const hasTabs = /\t/.test(text);
+
+      let titles: string[] = [];
+
+      if (hasTabs) {
+        const rows = text.split(/\r?\n/).filter((r) => r.trim());
+        if (rows.length > 1) {
+          // Multi-row TSV (Google Sheets multi-row): first column of each row = task
+          titles = rows.map((r) => r.split("\t")[0].trim()).filter(Boolean);
+        } else {
+          // Single-row TSV (Google Sheets single row): each cell = task
+          titles = text.split("\t").map((s) => s.trim()).filter(Boolean);
+        }
+      } else if (hasNewlines) {
+        // Plain multi-line text or bullet list
+        titles = text
+          .split(/\r?\n/)
+          .map((l) => l.replace(/^[\s]*[-*•◦▪▸►>\u2022\u2023\u25E6\u2043]+\s*/, "").trim())
+          .filter(Boolean);
+      }
+
+      if (titles.length < 2) return; // single item — let browser handle normally
       e.preventDefault();
-      lines.forEach((title) => createTask({ title }));
+      titles.forEach((title) => createTask({ title }));
       setQuickTitle("");
     },
     [createTask]

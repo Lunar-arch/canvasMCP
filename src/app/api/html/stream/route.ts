@@ -38,6 +38,23 @@ function encodeBase64Utf8(value: string): string {
   return Buffer.from(value, "utf8").toString("base64");
 }
 
+function parseBooleanParam(rawValue: string | null, defaultValue: boolean): boolean {
+  if (rawValue === null) {
+    return defaultValue;
+  }
+
+  const normalized = String(rawValue).trim().toLowerCase();
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+
+  return defaultValue;
+}
+
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -90,23 +107,21 @@ interface InlinedHtmlResult {
 }
 
 interface InlineAssetOptions {
-  inlineScripts?: boolean;
-  inlineStyles?: boolean;
+  inlineScripts: boolean;
+  inlineStyles: boolean;
 }
 
 async function inlineHtmlAssets(
   html: string,
   origin: string,
-  options: InlineAssetOptions = {}
+  options: InlineAssetOptions
 ): Promise<InlinedHtmlResult> {
-  const inlineScripts = options.inlineScripts === true;
-  const inlineStyles = options.inlineStyles !== false;
   const normalizedOrigin = trimTrailingSlashes(origin);
   let output = html;
   let inlinedScriptCount = 0;
   let inlinedStyleCount = 0;
 
-  if (inlineScripts) {
+  if (options.inlineScripts) {
     const scriptTags = Array.from(
       output.matchAll(/<script\b[^>]*\bsrc=(["'])([^"']+)\1[^>]*>\s*<\/script>/gi)
     );
@@ -137,7 +152,7 @@ async function inlineHtmlAssets(
     }
   }
 
-  if (inlineStyles) {
+  if (options.inlineStyles) {
     const linkTags = Array.from(output.matchAll(/<link\b[^>]*>/gi));
     for (const match of linkTags) {
       const linkTag = match[0];
@@ -169,11 +184,20 @@ async function inlineHtmlAssets(
     }
   }
 
-  output = output.replace(
-    /<link\b[^>]*\brel=(["'])(modulepreload|preload)\1[^>]*\bas=(["'])(script|style)\3[^>]*>/gi,
-    ""
-  );
-  output = output.replace(/<link\b[^>]*\brel=(["'])modulepreload\1[^>]*>/gi, "");
+  if (options.inlineScripts) {
+    output = output.replace(
+      /<link\b[^>]*\brel=(["'])(modulepreload|preload)\1[^>]*\bas=(["'])script\3[^>]*>/gi,
+      ""
+    );
+    output = output.replace(/<link\b[^>]*\brel=(["'])modulepreload\1[^>]*>/gi, "");
+  }
+
+  if (options.inlineStyles) {
+    output = output.replace(
+      /<link\b[^>]*\brel=(["'])preload\1[^>]*\bas=(["'])style\2[^>]*>/gi,
+      ""
+    );
+  }
 
   return {
     html: output,
@@ -189,8 +213,14 @@ export function OPTIONS() {
 export async function GET(req: NextRequest) {
   const target = resolveHtmlTarget(req.nextUrl.searchParams.get("target"));
   const delivery = resolveDeliveryMode(req.nextUrl.searchParams.get("delivery"));
-  const inlineScripts =
-    String(req.nextUrl.searchParams.get("inlineScripts") || "").trim() === "1";
+  const inlineScripts = parseBooleanParam(
+    req.nextUrl.searchParams.get("inlineScripts"),
+    delivery === "inline"
+  );
+  const inlineStyles = parseBooleanParam(
+    req.nextUrl.searchParams.get("inlineStyles"),
+    delivery === "inline"
+  );
   const renderUrl = `${req.nextUrl.origin}/api/html/render?target=${encodeURIComponent(target)}`;
   const appUrl = `${req.nextUrl.origin}${target}`;
 
@@ -233,17 +263,19 @@ export async function GET(req: NextRequest) {
         let inlinedScriptCount = 0;
         let inlinedStyleCount = 0;
 
-        if (delivery === "inline") {
+        if (delivery === "inline" && (inlineScripts || inlineStyles)) {
           pushStatus(
             "packaging",
-            inlineScripts
+            inlineScripts && inlineStyles
               ? "Inlining JS and CSS assets..."
-              : "Inlining CSS assets and preserving script URLs...",
+              : inlineScripts
+                ? "Inlining JS assets..."
+                : "Inlining CSS assets...",
             82
           );
           const inlined = await inlineHtmlAssets(prepared.html, req.nextUrl.origin, {
             inlineScripts,
-            inlineStyles: true,
+            inlineStyles,
           });
           htmlPayload = inlined.html;
           inlinedScriptCount = inlined.inlinedScriptCount;
@@ -254,7 +286,9 @@ export async function GET(req: NextRequest) {
         pushStatus(
           "sending",
           delivery === "inline"
-            ? "Streaming HTML + JS payload..."
+            ? inlineScripts
+              ? "Streaming HTML + JS payload..."
+              : "Streaming HTML payload..."
             : "Sending launch metadata...",
           92
         );
@@ -278,6 +312,7 @@ export async function GET(req: NextRequest) {
           completePayload.htmlBase64 = encodeBase64Utf8(htmlPayload);
           completePayload.htmlLength = htmlPayload.length;
           completePayload.inlineScripts = inlineScripts;
+          completePayload.inlineStyles = inlineStyles;
           completePayload.inlinedScriptCount = inlinedScriptCount;
           completePayload.inlinedStyleCount = inlinedStyleCount;
         }
