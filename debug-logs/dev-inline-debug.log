@@ -1,0 +1,26 @@
+
+> canvas-study@0.1.0 dev
+> next dev --webpack --port 3000
+
+▲ Next.js 16.2.1 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://10.109.208.253:3000
+- Environments: .env.local
+✓ Ready in 1041ms
+
+○ Compiling / ...
+ GET / 200 in 8.5s (next.js: 6.8s, application-code: 1650ms)
+ GET / 200 in 172ms (next.js: 29ms, application-code: 143ms)
+ GET /api/html/render?target=%2F 200 in 2.7s (next.js: 2.5s, application-code: 128ms)
+ GET /api/html/render?target=%2F 200 in 47ms (next.js: 17ms, application-code: 31ms)
+ GET / 200 in 1052ms (next.js: 219ms, application-code: 832ms)
+ GET /api/html/render?target=%2F 200 in 125ms (next.js: 6ms, application-code: 119ms)
+ GET /api/html/stream?target=%2F&delivery=inline 200 in 3.3s (next.js: 2.0s, application-code: 1271ms)
+ GET /api/html/stream?target=%2F&delivery=inline 200 in 1220ms (next.js: 12ms, application-code: 1208ms)
+ GET /api/html/render?target=%2F 200 in 790ms (next.js: 732ms, application-code: 57ms)
+ GET /api/html/render?target=%2F 200 in 35ms (next.js: 8ms, application-code: 27ms)
+ GET /api/html/render?target=%2F 200 in 33ms (next.js: 8ms, application-code: 25ms)
+ GET /api/html/render?target=%2F 200 in 34ms (next.js: 8ms, application-code: 26ms)
+ GET /api/html/render?target=%2F 200 in 34ms (next.js: 8ms, application-code: 26ms)
+ GET /api/html/render?target=%2F 200 in 30ms (next.js: 6ms, application-code: 24ms)
+[?25h

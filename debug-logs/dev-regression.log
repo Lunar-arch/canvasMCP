@@ -1,0 +1,17 @@
+
+> canvas-study@0.1.0 dev
+> next dev --webpack --port 3000
+
+▲ Next.js 16.2.1 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://10.109.208.253:3000
+- Environments: .env.local
+✓ Ready in 1199ms
+
+○ Compiling / ...
+ GET / 200 in 4.5s (next.js: 4.1s, application-code: 351ms)
+ GET / 200 in 333ms (next.js: 67ms, application-code: 266ms)
+ GET /api/html/stream?target=%2F&delivery=inline 200 in 3.3s (next.js: 1208ms, application-code: 2.1s)
+ GET / 200 in 123ms (next.js: 15ms, application-code: 109ms)
+ GET /api/html/stream?target=%2F&delivery=inline 200 in 3.1s (next.js: 8ms, application-code: 3.1s)
+[?25h

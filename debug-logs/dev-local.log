@@ -1,0 +1,14 @@
+
+> canvas-study@0.1.0 dev C:\Users\Nathan\Git\canvasMCP
+> next dev --webpack
+
+▲ Next.js 16.2.1 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://10.109.208.253:3000
+- Environments: .env.local
+✓ Ready in 966ms
+
+ GET /api/html/stream?target=%2F&delivery=inline 200 in 3.3s (next.js: 1804ms, application-code: 1467ms)
+ GET /api/html/stream?target=%2F&delivery=inline 200 in 973ms (next.js: 5ms, application-code: 968ms)
+[?25h
+ ELIFECYCLE  Command failed with exit code 1.
