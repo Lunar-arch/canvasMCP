@@ -280,6 +280,21 @@ export default function DashboardPage() {
     }
   };
 
+  const handleQuickPaste = useCallback(
+    (e: React.ClipboardEvent<HTMLInputElement>) => {
+      const text = e.clipboardData.getData("text");
+      const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.replace(/^[\s\t]*[-*•◦▪▸►>]+\s*/, "").trim())
+        .filter(Boolean);
+      if (lines.length <= 1) return; // single line — let browser handle normally
+      e.preventDefault();
+      lines.forEach((title) => createTask({ title }));
+      setQuickTitle("");
+    },
+    [createTask]
+  );
+
   // Selection handler
   const handleTaskSelect = useCallback(
     (taskId: string, e: React.MouseEvent) => {
@@ -611,7 +626,7 @@ export default function DashboardPage() {
                   {showAddDropdown && (
                     <div className="absolute right-0 top-full mt-1 bg-[var(--bg-card)] border border-[var(--border)] rounded-xl shadow-lg z-10 w-44 py-1">
                       <button
-                        onClick={handleQuickAddTask}
+                        onClick={() => handleQuickAddTask()}
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--bg-hover)] transition-colors"
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -645,6 +660,7 @@ export default function DashboardPage() {
                       block={block}
                       tasks={blockTasks[block.id] || []}
                       tags={data.tags}
+                      courses={data.courses}
                       courseColors={courseColors}
                       onPlayBlock={() => startFocusBlock(block.id)}
                       onToggleComplete={completeTask}
@@ -654,6 +670,11 @@ export default function DashboardPage() {
                       onDeleteBlock={() => deleteBlock(block.id)}
                       onAddTag={addTagToTask}
                       onRemoveTag={removeTagFromTask}
+                      onBulkUpdateTasks={(updates) => {
+                        (blockTasks[block.id] || []).forEach((task) => {
+                          updateTask(task.id, updates);
+                        });
+                      }}
                       onEditTask={(taskId) => setEditingTaskId(taskId)}
                       onDeleteTask={(taskId) => deleteTask(taskId)}
                       selectedTaskIds={selectedTaskIds}

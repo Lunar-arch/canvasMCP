@@ -89,72 +89,84 @@ interface InlinedHtmlResult {
   inlinedStyleCount: number;
 }
 
+interface InlineAssetOptions {
+  inlineScripts?: boolean;
+  inlineStyles?: boolean;
+}
+
 async function inlineHtmlAssets(
   html: string,
-  origin: string
+  origin: string,
+  options: InlineAssetOptions = {}
 ): Promise<InlinedHtmlResult> {
+  const inlineScripts = options.inlineScripts === true;
+  const inlineStyles = options.inlineStyles !== false;
   const normalizedOrigin = trimTrailingSlashes(origin);
   let output = html;
   let inlinedScriptCount = 0;
   let inlinedStyleCount = 0;
 
-  const scriptTags = Array.from(
-    output.matchAll(/<script\b[^>]*\bsrc=(["'])([^"']+)\1[^>]*>\s*<\/script>/gi)
-  );
+  if (inlineScripts) {
+    const scriptTags = Array.from(
+      output.matchAll(/<script\b[^>]*\bsrc=(["'])([^"']+)\1[^>]*>\s*<\/script>/gi)
+    );
 
-  for (const match of scriptTags) {
-    const scriptTag = match[0];
-    const rawSrc = match[2];
-    const resolvedSrc = toAbsoluteUrl(rawSrc, normalizedOrigin);
-    if (!resolvedSrc || !isSameOrigin(resolvedSrc, normalizedOrigin)) {
-      continue;
+    for (const match of scriptTags) {
+      const scriptTag = match[0];
+      const rawSrc = match[2];
+      const resolvedSrc = toAbsoluteUrl(rawSrc, normalizedOrigin);
+      if (!resolvedSrc || !isSameOrigin(resolvedSrc, normalizedOrigin)) {
+        continue;
+      }
+
+      const scriptSource = await fetchText(resolvedSrc);
+      if (!scriptSource) {
+        continue;
+      }
+
+      const openTagEnd = scriptTag.indexOf(">");
+      if (openTagEnd < 0) {
+        continue;
+      }
+
+      const openTag = scriptTag.slice(0, openTagEnd + 1);
+      const openTagWithoutSrc = openTag.replace(/\s+\bsrc=(["']).*?\1/i, "");
+      const replacement = `${openTagWithoutSrc}${escapeInlineScript(scriptSource)}</script>`;
+      output = output.replace(scriptTag, () => replacement);
+      inlinedScriptCount += 1;
     }
-
-    const scriptSource = await fetchText(resolvedSrc);
-    if (!scriptSource) {
-      continue;
-    }
-
-    const openTagEnd = scriptTag.indexOf(">");
-    if (openTagEnd < 0) {
-      continue;
-    }
-
-    const openTag = scriptTag.slice(0, openTagEnd + 1);
-    const openTagWithoutSrc = openTag.replace(/\s+\bsrc=(["']).*?\1/i, "");
-    const replacement = `${openTagWithoutSrc}${escapeInlineScript(scriptSource)}</script>`;
-    output = output.replace(scriptTag, () => replacement);
-    inlinedScriptCount += 1;
   }
 
-  const linkTags = Array.from(output.matchAll(/<link\b[^>]*>/gi));
-  for (const match of linkTags) {
-    const linkTag = match[0];
-    const relMatch = linkTag.match(/\brel=(["'])([^"']+)\1/i);
-    if (!relMatch || relMatch[2].toLowerCase() !== "stylesheet") {
-      continue;
-    }
+  if (inlineStyles) {
+    const linkTags = Array.from(output.matchAll(/<link\b[^>]*>/gi));
+    for (const match of linkTags) {
+      const linkTag = match[0];
+      const relMatch = linkTag.match(/\brel=(["'])([^"']+)\1/i);
+      if (!relMatch || relMatch[2].toLowerCase() !== "stylesheet") {
+        continue;
+      }
 
-    const hrefMatch = linkTag.match(/\bhref=(["'])([^"']+)\1/i);
-    if (!hrefMatch) {
-      continue;
-    }
+      const hrefMatch = linkTag.match(/\bhref=(["'])([^"']+)\1/i);
+      if (!hrefMatch) {
+        continue;
+      }
 
-    const rawHref = hrefMatch[2];
-    const resolvedHref = toAbsoluteUrl(rawHref, normalizedOrigin);
-    if (!resolvedHref || !isSameOrigin(resolvedHref, normalizedOrigin)) {
-      continue;
-    }
+      const rawHref = hrefMatch[2];
+      const resolvedHref = toAbsoluteUrl(rawHref, normalizedOrigin);
+      if (!resolvedHref || !isSameOrigin(resolvedHref, normalizedOrigin)) {
+        continue;
+      }
 
-    const styleSource = await fetchText(resolvedHref);
-    if (!styleSource) {
-      continue;
-    }
+      const styleSource = await fetchText(resolvedHref);
+      if (!styleSource) {
+        continue;
+      }
 
-    const safeHrefAttr = rawHref.replace(/"/g, "&quot;");
-    const replacement = `<style data-inline-href="${safeHrefAttr}">${escapeInlineStyle(styleSource)}</style>`;
-    output = output.replace(linkTag, () => replacement);
-    inlinedStyleCount += 1;
+      const safeHrefAttr = rawHref.replace(/"/g, "&quot;");
+      const replacement = `<style data-inline-href="${safeHrefAttr}">${escapeInlineStyle(styleSource)}</style>`;
+      output = output.replace(linkTag, () => replacement);
+      inlinedStyleCount += 1;
+    }
   }
 
   output = output.replace(
@@ -177,6 +189,8 @@ export function OPTIONS() {
 export async function GET(req: NextRequest) {
   const target = resolveHtmlTarget(req.nextUrl.searchParams.get("target"));
   const delivery = resolveDeliveryMode(req.nextUrl.searchParams.get("delivery"));
+  const inlineScripts =
+    String(req.nextUrl.searchParams.get("inlineScripts") || "").trim() === "1";
   const renderUrl = `${req.nextUrl.origin}/api/html/render?target=${encodeURIComponent(target)}`;
   const appUrl = `${req.nextUrl.origin}${target}`;
 
@@ -220,8 +234,17 @@ export async function GET(req: NextRequest) {
         let inlinedStyleCount = 0;
 
         if (delivery === "inline") {
-          pushStatus("packaging", "Inlining JS and CSS assets...", 82);
-          const inlined = await inlineHtmlAssets(prepared.html, req.nextUrl.origin);
+          pushStatus(
+            "packaging",
+            inlineScripts
+              ? "Inlining JS and CSS assets..."
+              : "Inlining CSS assets and preserving script URLs...",
+            82
+          );
+          const inlined = await inlineHtmlAssets(prepared.html, req.nextUrl.origin, {
+            inlineScripts,
+            inlineStyles: true,
+          });
           htmlPayload = inlined.html;
           inlinedScriptCount = inlined.inlinedScriptCount;
           inlinedStyleCount = inlined.inlinedStyleCount;
@@ -254,6 +277,7 @@ export async function GET(req: NextRequest) {
         if (delivery === "inline") {
           completePayload.htmlBase64 = encodeBase64Utf8(htmlPayload);
           completePayload.htmlLength = htmlPayload.length;
+          completePayload.inlineScripts = inlineScripts;
           completePayload.inlinedScriptCount = inlinedScriptCount;
           completePayload.inlinedStyleCount = inlinedStyleCount;
         }
