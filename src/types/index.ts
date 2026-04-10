@@ -167,6 +167,40 @@ export interface TaskBlock {
   breakMinutes?: number;
 }
 
+export type RuleConditionField = "title" | "courseName" | "hasDueDate" | "pointsPossible";
+export type RuleConditionOperator =
+  | "contains"
+  | "not_contains"
+  | "equals"
+  | "not_equals"
+  | "is_null"
+  | "is_not_null"
+  | "gt"
+  | "lt";
+export type RuleActionField = "priority" | "dueDateOffset" | "estimatedMinutes" | "addTag";
+
+export interface RuleCondition {
+  id: string;
+  field: RuleConditionField;
+  operator: RuleConditionOperator;
+  value: string;
+}
+
+export interface RuleAction {
+  id: string;
+  field: RuleActionField;
+  value: string; // priority: "low"|"medium"|"high"|"urgent"|"none"; dueDateOffset: days as string; estimatedMinutes: number as string; addTag: tag id
+}
+
+export interface TaskRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  conditionLogic: "all" | "any";
+  conditions: RuleCondition[];
+  actions: RuleAction[];
+}
+
 export interface AppData {
   config: CanvasConfig | null;
   macros: Macro[];
@@ -175,6 +209,7 @@ export interface AppData {
   tasks: StudyTask[];
   blocks: TaskBlock[];
   tags: Tag[];
+  taskRules: TaskRule[];
   settings: AppSettings;
   lastSynced: string | null;
 }

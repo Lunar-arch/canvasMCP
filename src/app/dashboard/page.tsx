@@ -34,7 +34,12 @@ import {
   CalendarDays,
   MoveRight,
   Tag as TagIcon,
+  CloudUpload,
+  CloudCheck,
+  Cloud,
 } from "lucide-react";
+import { AuthButton } from "@/components/AuthModal";
+import { useAuth } from "@/hooks/useAuth";
 import {
   DndContext,
   DragEndEvent,
@@ -102,6 +107,7 @@ export default function DashboardPage() {
   const {
     data,
     isLoaded,
+    syncStatus,
     completeTask,
     updateTask,
     createBlock,
@@ -117,6 +123,7 @@ export default function DashboardPage() {
     removeTagFromTask,
     syncFromCanvas,
   } = useAppData();
+  const { user } = useAuth();
 
   const totalRemainingSeconds = useMemo(() =>
     data.tasks.reduce((sum, t) => (!t.completed && t.secondsRemaining ? sum + t.secondsRemaining : sum), 0),
@@ -548,6 +555,32 @@ export default function DashboardPage() {
                   </button>
                 </div>
 
+                {/* Cloud sync status */}
+                {user && (
+                  <div
+                    className="p-2.5 rounded-xl border border-[var(--border)] text-[var(--text-muted)]"
+                    title={
+                      syncStatus === "syncing"
+                        ? "Syncing to cloud…"
+                        : syncStatus === "synced"
+                        ? "Synced to cloud"
+                        : syncStatus === "error"
+                        ? "Cloud sync error"
+                        : "Cloud sync idle"
+                    }
+                  >
+                    {syncStatus === "syncing" ? (
+                      <CloudUpload className="w-4 h-4 animate-pulse text-[var(--primary)]" />
+                    ) : syncStatus === "synced" ? (
+                      <CloudCheck className="w-4 h-4 text-green-500" />
+                    ) : syncStatus === "error" ? (
+                      <Cloud className="w-4 h-4 text-red-500" />
+                    ) : (
+                      <Cloud className="w-4 h-4" />
+                    )}
+                  </div>
+                )}
+
                 {/* Sync */}
                 <button
                   onClick={handleSync}
@@ -569,6 +602,9 @@ export default function DashboardPage() {
                 >
                   <Settings className="w-4 h-4" />
                 </Link>
+
+                {/* Auth */}
+                <AuthButton />
               </div>
             </div>
           </div>

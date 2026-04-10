@@ -6,6 +6,7 @@ import {
   useState,
   useEffect,
   useCallback,
+  useRef,
   ReactNode,
 } from "react";
 import { v4 as uuid } from "uuid";
@@ -21,19 +22,31 @@ import {
   FilterState,
   AppSettings,
   Macro,
+  TaskRule,
+  RuleCondition,
+  RuleAction,
 } from "@/types";
 import { getDefaultData, loadData, saveData } from "@/lib/storage";
 import { COURSE_COLORS } from "@/lib/colors";
+import { useAuth } from "@/hooks/useAuth";
+import { createClient } from "@/utils/supabase/client";
+
+export type SyncStatus = "idle" | "syncing" | "synced" | "error";
 
 interface AppContextType {
   data: AppData;
   isLoaded: boolean;
+  syncStatus: SyncStatus;
   // Config
   saveConfig: (config: CanvasConfig) => void;
   // Macros
   createMacro: (input: Partial<Macro>) => Macro;
   updateMacro: (id: string, updates: Partial<Macro>) => void;
   deleteMacro: (id: string) => void;
+  // Task Rules
+  createTaskRule: (input: Partial<TaskRule>) => TaskRule;
+  updateTaskRule: (id: string, updates: Partial<TaskRule>) => void;
+  deleteTaskRule: (id: string) => void;
   // Sync
   syncFromCanvas: (
     courses: Course[],
@@ -64,14 +77,162 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
+// ─── Rule evaluation ──────────────────────────────────────────────────────────
+
+function evaluateCondition(task: StudyTask, cond: RuleCondition): boolean {
+  const raw = (() => {
+    switch (cond.field) {
+      case "title": return task.title;
+      case "courseName": return task.courseName ?? "";
+      case "hasDueDate": return task.dueAt ? "yes" : "no";
+      case "pointsPossible": return String(task.pointsPossible ?? "");
+    }
+  })();
+
+  switch (cond.operator) {
+    case "contains": return raw.toLowerCase().includes(cond.value.toLowerCase());
+    case "not_contains": return !raw.toLowerCase().includes(cond.value.toLowerCase());
+    case "equals": return raw.toLowerCase() === cond.value.toLowerCase();
+    case "not_equals": return raw.toLowerCase() !== cond.value.toLowerCase();
+    case "is_null": return raw === "" || raw === "no";
+    case "is_not_null": return raw !== "" && raw !== "no";
+    case "gt": return parseFloat(raw) > parseFloat(cond.value);
+    case "lt": return parseFloat(raw) < parseFloat(cond.value);
+  }
+}
+
+function applyRules(task: StudyTask, rules: TaskRule[]): StudyTask {
+  let result = { ...task };
+  for (const rule of rules) {
+    if (!rule.enabled || rule.conditions.length === 0) continue;
+    const matches =
+      rule.conditionLogic === "all"
+        ? rule.conditions.every((c) => evaluateCondition(result, c))
+        : rule.conditions.some((c) => evaluateCondition(result, c));
+    if (!matches) continue;
+
+    for (const action of rule.actions) {
+      switch (action.field) {
+        case "priority":
+          result.priority =
+            action.value === "none"
+              ? null
+              : (action.value as StudyTask["priority"]);
+          break;
+        case "dueDateOffset": {
+          const days = parseInt(action.value, 10);
+          if (!isNaN(days) && result.dueAt) {
+            const d = new Date(result.dueAt);
+            d.setDate(d.getDate() + days);
+            result.dueAt = d.toISOString();
+          }
+          break;
+        }
+        case "estimatedMinutes": {
+          const mins = parseInt(action.value, 10);
+          if (!isNaN(mins)) result.estimatedMinutes = mins;
+          break;
+        }
+        case "addTag": {
+          if (action.value && !result.tags.includes(action.value)) {
+            result.tags = [...result.tags, action.value];
+          }
+          break;
+        }
+      }
+    }
+  }
+  return result;
+}
+
+// ─── Cloud save (debounced) ───────────────────────────────────────────────────
+
+const CLOUD_DEBOUNCE_MS = 2500;
+
 export function AppProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [data, setData] = useState<AppData>(() => getDefaultData());
   const [isLoaded, setIsLoaded] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const cloudSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialLoad = useRef(true);
 
+  // Load data on mount: prefer cloud when signed in
   useEffect(() => {
-    setData(loadData());
-    setIsLoaded(true);
-  }, []);
+    const local = loadData();
+    if (!user) {
+      setData(local);
+      setIsLoaded(true);
+      return;
+    }
+
+    // Load from Supabase
+    const supabase = createClient();
+    (async () => {
+      try {
+        const { data: row } = await supabase
+          .from("user_data")
+          .select("data")
+          .eq("user_id", user.id)
+          .single();
+        if (row?.data) {
+          const defaults = getDefaultData();
+          const cloud = row.data as Partial<AppData>;
+          const merged: AppData = {
+            ...defaults,
+            ...cloud,
+            taskRules: cloud.taskRules ?? [],
+            settings: { ...defaults.settings, ...(cloud.settings ?? {}) },
+          };
+          setData(merged);
+          saveData(merged); // mirror to localStorage
+        } else {
+          setData(local);
+        }
+      } catch {
+        setData(local);
+      } finally {
+        setIsLoaded(true);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Cloud sync whenever data changes (debounced)
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
+    }
+
+    if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
+    setSyncStatus("syncing");
+
+    cloudSaveTimer.current = setTimeout(async () => {
+      try {
+        const supabase = createClient();
+        const { error } = await supabase.from("user_data").upsert(
+          { user_id: user.id, data, updated_at: new Date().toISOString() },
+          { onConflict: "user_id" }
+        );
+        setSyncStatus(error ? "error" : "synced");
+      } catch {
+        setSyncStatus("error");
+      }
+    }, CLOUD_DEBOUNCE_MS);
+
+    return () => {
+      if (cloudSaveTimer.current) clearTimeout(cloudSaveTimer.current);
+    };
+  }, [data, isLoaded, user]);
+
+  // Reset sync status to idle after showing "synced"
+  useEffect(() => {
+    if (syncStatus !== "synced") return;
+    const t = setTimeout(() => setSyncStatus("idle"), 3000);
+    return () => clearTimeout(t);
+  }, [syncStatus]);
 
   const persist = useCallback((updater: (prev: AppData) => AppData) => {
     setData((prev) => {
@@ -87,6 +248,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [persist]
   );
+
+  // ─── Macros ────────────────────────────────────────────────────────────────
 
   const createMacro = useCallback(
     (input: Partial<Macro>): Macro => {
@@ -126,6 +289,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [persist]
   );
+
+  // ─── Task Rules ────────────────────────────────────────────────────────────
+
+  const createTaskRule = useCallback(
+    (input: Partial<TaskRule>): TaskRule => {
+      const rule: TaskRule = {
+        id: uuid(),
+        name: input.name || "New Rule",
+        enabled: input.enabled ?? true,
+        conditionLogic: input.conditionLogic || "all",
+        conditions: input.conditions || [],
+        actions: input.actions || [],
+      };
+      persist((d) => ({ ...d, taskRules: [...(d.taskRules || []), rule] }));
+      return rule;
+    },
+    [persist]
+  );
+
+  const updateTaskRule = useCallback(
+    (id: string, updates: Partial<TaskRule>) => {
+      persist((d) => ({
+        ...d,
+        taskRules: (d.taskRules || []).map((r) => (r.id === id ? { ...r, ...updates } : r)),
+      }));
+    },
+    [persist]
+  );
+
+  const deleteTaskRule = useCallback(
+    (id: string) => {
+      persist((d) => ({ ...d, taskRules: (d.taskRules || []).filter((r) => r.id !== id) }));
+    },
+    [persist]
+  );
+
+  // ─── Canvas sync ───────────────────────────────────────────────────────────
 
   const syncFromCanvas = useCallback(
     (courses: Course[], assignments: Assignment[], options?: CanvasSyncOptions) => {
@@ -167,6 +367,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const reviewNoDueDateTasks = options?.reviewNoDueDateTasks ?? false;
         const approvedNoDueIds = new Set(options?.approvedNoDueAssignmentIds || []);
 
+        const rules = d.taskRules || [];
+
         const importedTasks: StudyTask[] = trackedAssignments
           .filter((a) => {
             const existing = existingTaskMap.get(a.id);
@@ -187,7 +389,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .map((a, i) => {
             const existing = existingTaskMap.get(a.id);
             const course = coloredCourses.find((c) => c.id === a.course_id);
-            return {
+            const raw: StudyTask = {
               id: existing?.id || uuid(),
               assignmentId: a.id,
               courseId: a.course_id,
@@ -199,7 +401,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               completed: existing?.completed || false,
               estimatedMinutes: existing?.estimatedMinutes ?? 0,
               elapsedMinutes: existing?.elapsedMinutes || 0,
-              priority: existing?.priority || "medium",
+              priority: existing?.priority !== undefined ? existing.priority : null,
               tags: existing?.tags || [],
               blockId: existing?.blockId,
               order: existing?.order ?? i,
@@ -209,6 +411,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
               links: existing?.links || [],
               taskLinks: existing?.taskLinks || [],
             };
+            // Apply rules only to newly imported tasks (no existing record)
+            return existing ? raw : applyRules(raw, rules);
           });
 
         const customTasks = d.tasks.filter((t) => !t.assignmentId);
@@ -239,6 +443,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [persist]
   );
+
+  // ─── Tasks ─────────────────────────────────────────────────────────────────
 
   const createTask = useCallback(
     (input: Partial<StudyTask>) => {
@@ -304,6 +510,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [persist]
   );
 
+  // ─── Blocks ────────────────────────────────────────────────────────────────
+
   const createBlock = useCallback(
     (name: string, color: string) => {
       const block: TaskBlock = {
@@ -365,6 +573,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [persist]
   );
+
+  // ─── Tags ──────────────────────────────────────────────────────────────────
 
   const createTag = useCallback(
     (name: string, color: string) => {
@@ -432,6 +642,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [persist]
   );
 
+  // ─── Settings ──────────────────────────────────────────────────────────────
+
   const updateSettings = useCallback(
     (settings: Partial<AppSettings>) => {
       persist((d) => ({
@@ -447,10 +659,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       value={{
         data,
         isLoaded,
+        syncStatus,
         saveConfig,
         createMacro,
         updateMacro,
         deleteMacro,
+        createTaskRule,
+        updateTaskRule,
+        deleteTaskRule,
         syncFromCanvas,
         createTask,
         updateTask,
@@ -462,7 +678,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         moveTaskToBlock,
         reorderTasks,
         createTag,
-            createCourse,
+        createCourse,
         deleteTag,
         addTagToTask,
         removeTagFromTask,

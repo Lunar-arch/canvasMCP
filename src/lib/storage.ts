@@ -25,6 +25,7 @@ export function getDefaultData(): AppData {
     tasks: [],
     blocks: [],
     tags: [],
+    taskRules: [],
     settings: createDefaultSettings(),
     lastSynced: null,
   };
@@ -40,6 +41,7 @@ export function loadData(): AppData {
     return {
       ...defaults,
       ...parsed,
+      taskRules: parsed.taskRules ?? [],
       settings: {
         ...defaults.settings,
         ...(parsed.settings ?? {}),

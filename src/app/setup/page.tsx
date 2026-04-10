@@ -58,7 +58,11 @@ import {
   Eye,
   EyeOff,
   X,
+  Filter,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import { TaskRule, RuleCondition, RuleAction } from "@/types";
 import Link from "next/link";
 import {
   DndContext,
@@ -2279,6 +2283,311 @@ function SettingsPanel() {
   );
 }
 
+// ─── RulesPanel ───────────────────────────────────────────────────────────────
+
+const CONDITION_FIELD_LABELS: Record<string, string> = {
+  title: "Title",
+  courseName: "Course name",
+  hasDueDate: "Has due date",
+  pointsPossible: "Points possible",
+};
+
+const OPERATOR_LABELS: Record<string, string> = {
+  contains: "contains",
+  not_contains: "does not contain",
+  equals: "equals",
+  not_equals: "does not equal",
+  is_null: "is empty / no",
+  is_not_null: "is not empty / yes",
+  gt: "greater than",
+  lt: "less than",
+};
+
+const ACTION_FIELD_LABELS: Record<string, string> = {
+  priority: "Set priority",
+  dueDateOffset: "Shift due date (days)",
+  estimatedMinutes: "Set estimated minutes",
+  addTag: "Add tag",
+};
+
+const PRIORITY_OPTIONS = [
+  { value: "none", label: "None (clear)" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "urgent", label: "Urgent" },
+];
+
+function RuleCard({
+  rule,
+  tags,
+  onUpdate,
+  onDelete,
+}: {
+  rule: TaskRule;
+  tags: { id: string; name: string; color: string }[];
+  onUpdate: (id: string, u: Partial<TaskRule>) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const addCondition = () => {
+    const cond: RuleCondition = { id: uuid(), field: "title", operator: "contains", value: "" };
+    onUpdate(rule.id, { conditions: [...rule.conditions, cond] });
+  };
+
+  const updateCondition = (condId: string, u: Partial<RuleCondition>) => {
+    onUpdate(rule.id, {
+      conditions: rule.conditions.map((c) => (c.id === condId ? { ...c, ...u } : c)),
+    });
+  };
+
+  const removeCondition = (condId: string) => {
+    onUpdate(rule.id, { conditions: rule.conditions.filter((c) => c.id !== condId) });
+  };
+
+  const addAction = () => {
+    const action: RuleAction = { id: uuid(), field: "priority", value: "high" };
+    onUpdate(rule.id, { actions: [...rule.actions, action] });
+  };
+
+  const updateAction = (actId: string, u: Partial<RuleAction>) => {
+    onUpdate(rule.id, {
+      actions: rule.actions.map((a) => (a.id === actId ? { ...a, ...u } : a)),
+    });
+  };
+
+  const removeAction = (actId: string) => {
+    onUpdate(rule.id, { actions: rule.actions.filter((a) => a.id !== actId) });
+  };
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-3">
+        <button
+          onClick={() => onUpdate(rule.id, { enabled: !rule.enabled })}
+          className={`transition-colors shrink-0 ${rule.enabled ? "text-green-500" : "text-[var(--text-muted)]"}`}
+          title={rule.enabled ? "Enabled" : "Disabled"}
+        >
+          {rule.enabled ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+        </button>
+        <input
+          value={rule.name}
+          onChange={(e) => onUpdate(rule.id, { name: e.target.value })}
+          className="flex-1 text-sm font-medium bg-transparent border-none outline-none placeholder:text-[var(--text-muted)]"
+          placeholder="Rule name…"
+        />
+        <span className="text-xs text-[var(--text-muted)]">
+          {rule.conditions.length} cond · {rule.actions.length} action{rule.actions.length !== 1 ? "s" : ""}
+        </span>
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="p-1 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-muted)] transition-colors"
+        >
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+        <button
+          onClick={() => { if (confirm(`Delete rule "${rule.name}"?`)) onDelete(rule.id); }}
+          className="p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950 text-[var(--text-muted)] hover:text-red-500 transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="px-4 pb-4 space-y-4 border-t border-[var(--border)]">
+          {/* Condition logic toggle */}
+          <div className="flex items-center gap-2 pt-3 text-sm">
+            <span className="text-[var(--text-muted)]">Match</span>
+            <div className="flex rounded-lg border border-[var(--border)] overflow-hidden text-xs">
+              {(["all", "any"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => onUpdate(rule.id, { conditionLogic: v })}
+                  className={`px-3 py-1 transition-colors ${
+                    rule.conditionLogic === v
+                      ? "bg-[var(--primary)] text-white"
+                      : "hover:bg-[var(--bg-hover)]"
+                  }`}
+                >
+                  {v === "all" ? "ALL" : "ANY"}
+                </button>
+              ))}
+            </div>
+            <span className="text-[var(--text-muted)]">conditions</span>
+          </div>
+
+          {/* Conditions */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              Conditions
+            </p>
+            {rule.conditions.map((cond) => (
+              <div key={cond.id} className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={cond.field}
+                  onChange={(e) => updateCondition(cond.id, { field: e.target.value as RuleCondition["field"] })}
+                  className="px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                >
+                  {Object.entries(CONDITION_FIELD_LABELS).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+                <select
+                  value={cond.operator}
+                  onChange={(e) => updateCondition(cond.id, { operator: e.target.value as RuleCondition["operator"] })}
+                  className="px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                >
+                  {Object.entries(OPERATOR_LABELS).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+                {!["is_null", "is_not_null"].includes(cond.operator) && (
+                  <input
+                    value={cond.value}
+                    onChange={(e) => updateCondition(cond.id, { value: e.target.value })}
+                    placeholder="value…"
+                    className="px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ring)] w-28"
+                  />
+                )}
+                <button
+                  onClick={() => removeCondition(cond.id)}
+                  className="p-1 text-[var(--text-muted)] hover:text-red-500 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={addCondition}
+              className="flex items-center gap-1.5 text-xs text-[var(--primary)] hover:underline"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add condition
+            </button>
+          </div>
+
+          {/* Actions */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              Then…
+            </p>
+            {rule.actions.map((action) => (
+              <div key={action.id} className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={action.field}
+                  onChange={(e) => updateAction(action.id, { field: e.target.value as RuleAction["field"], value: "" })}
+                  className="px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                >
+                  {Object.entries(ACTION_FIELD_LABELS).map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+                {action.field === "priority" ? (
+                  <select
+                    value={action.value}
+                    onChange={(e) => updateAction(action.id, { value: e.target.value })}
+                    className="px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  >
+                    {PRIORITY_OPTIONS.map((p) => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                  </select>
+                ) : action.field === "addTag" ? (
+                  <select
+                    value={action.value}
+                    onChange={(e) => updateAction(action.id, { value: e.target.value })}
+                    className="px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  >
+                    <option value="">— select tag —</option>
+                    {tags.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="number"
+                    value={action.value}
+                    onChange={(e) => updateAction(action.id, { value: e.target.value })}
+                    placeholder={action.field === "dueDateOffset" ? "days (neg = earlier)" : "minutes"}
+                    className="px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--ring)] w-36"
+                  />
+                )}
+                <button
+                  onClick={() => removeAction(action.id)}
+                  className="p-1 text-[var(--text-muted)] hover:text-red-500 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={addAction}
+              className="flex items-center gap-1.5 text-xs text-[var(--primary)] hover:underline"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add action
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RulesPanel() {
+  const { data, createTaskRule, updateTaskRule, deleteTaskRule } = useAppData();
+  const rules = data.taskRules || [];
+
+  return (
+    <div className="p-6 max-w-2xl space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold mb-1">Import Rules</h2>
+        <p className="text-sm text-[var(--text-muted)]">
+          Rules are applied automatically to newly imported tasks. They run in order — rules lower in the list can override earlier ones.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {rules.length === 0 && (
+          <div className="rounded-xl border-2 border-dashed border-[var(--border)] p-8 text-center space-y-2">
+            <Filter className="w-8 h-8 text-[var(--text-muted)] mx-auto opacity-40" />
+            <p className="text-sm text-[var(--text-muted)]">No rules yet.</p>
+            <p className="text-xs text-[var(--text-muted)]">
+              Rules let you automatically set priority, due dates, tags, and more based on task criteria.
+            </p>
+          </div>
+        )}
+
+        {rules.map((rule) => (
+          <RuleCard
+            key={rule.id}
+            rule={rule}
+            tags={data.tags}
+            onUpdate={updateTaskRule}
+            onDelete={deleteTaskRule}
+          />
+        ))}
+
+        <button
+          onClick={() => createTaskRule({ name: "New Rule" })}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-[var(--border)] text-sm text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--primary)] transition-colors w-full"
+        >
+          <Plus className="w-4 h-4" />
+          Add rule
+        </button>
+      </div>
+
+      <div className="rounded-xl bg-[var(--bg-card)] border border-[var(--border)] p-4 text-xs text-[var(--text-muted)] space-y-1.5">
+        <p className="font-semibold text-[var(--text)]">How rules work</p>
+        <p>Rules only run on <strong>newly</strong> imported tasks — tasks that don't already exist in your list. Existing tasks keep their current values.</p>
+        <p>Example: "If course name contains <em>Math</em>, set priority to High and estimated time to 60 min."</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 function Sidebar({
@@ -2288,6 +2597,8 @@ function Sidebar({
   onCreate,
   onSettings,
   settingsActive,
+  onRules,
+  rulesActive,
 }: {
   macros: Macro[];
   selectedId: string | null;
@@ -2295,7 +2606,10 @@ function Sidebar({
   onCreate: () => void;
   onSettings: () => void;
   settingsActive: boolean;
+  onRules: () => void;
+  rulesActive: boolean;
 }) {
+  const neitherActive = !settingsActive && !rulesActive;
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-[var(--border)]">
@@ -2322,7 +2636,7 @@ function Sidebar({
             key={m.id}
             onClick={() => onSelect(m.id)}
             className={`w-full text-left px-3 py-2.5 rounded-xl transition-colors ${
-              selectedId === m.id && !settingsActive
+              selectedId === m.id && neitherActive
                 ? "bg-[var(--primary)] text-white"
                 : "text-[var(--text)] hover:bg-[var(--bg-card)]"
             }`}
@@ -2336,7 +2650,7 @@ function Sidebar({
               <span className="font-medium text-sm truncate">{m.name}</span>
             </div>
             <div className={`flex items-center gap-2 mt-0.5 text-xs ${
-              selectedId === m.id && !settingsActive ? "text-white/60" : "text-[var(--text-muted)]"
+              selectedId === m.id && neitherActive ? "text-white/60" : "text-[var(--text-muted)]"
             }`}>
               <span className="capitalize">{m.sourceType}</span>
               {m.lastRun && (
@@ -2360,7 +2674,18 @@ function Sidebar({
         </div>
       </div>
 
-      <div className="p-3 border-t border-[var(--border)]">
+      <div className="p-3 border-t border-[var(--border)] space-y-1">
+        <button
+          onClick={onRules}
+          className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm transition-colors ${
+            rulesActive
+              ? "bg-[var(--primary)] text-white"
+              : "text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-card)]"
+          }`}
+        >
+          <Filter className="w-4 h-4" />
+          Import Rules
+        </button>
         <button
           onClick={onSettings}
           className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm transition-colors ${
@@ -2532,6 +2857,7 @@ export default function SetupPage() {
   const macros = data.macros || [];
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const [showNewModal, setShowNewModal] = useState(false);
   const [mobileTab, setMobileTab] = useState<"sidebar" | "editor">("sidebar");
 
@@ -2540,6 +2866,7 @@ export default function SetupPage() {
   const handleSelect = (id: string) => {
     setSelectedId(id);
     setShowSettings(false);
+    setShowRules(false);
     setMobileTab("editor");
   };
 
@@ -2600,8 +2927,10 @@ export default function SetupPage() {
           selectedId={selectedId}
           onSelect={handleSelect}
           onCreate={() => setShowNewModal(true)}
-          onSettings={() => { setShowSettings(true); setSelectedId(null); setMobileTab("editor"); }}
+          onSettings={() => { setShowSettings(true); setShowRules(false); setSelectedId(null); setMobileTab("editor"); }}
           settingsActive={showSettings}
+          onRules={() => { setShowRules(true); setShowSettings(false); setSelectedId(null); setMobileTab("editor"); }}
+          rulesActive={showRules}
         />
       </aside>
 
@@ -2613,6 +2942,10 @@ export default function SetupPage() {
         {showSettings ? (
           <div className="flex-1 overflow-y-auto">
             <SettingsPanel />
+          </div>
+        ) : showRules ? (
+          <div className="flex-1 overflow-y-auto">
+            <RulesPanel />
           </div>
         ) : selected ? (
           <div className="flex-1 overflow-hidden flex flex-col">
