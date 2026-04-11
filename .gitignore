@@ -1,5 +1,7 @@
 # dependencies
 /node_modules
+/mcp-server/node_modules
+/mcp-server/package-lock.json
 
 # next.js
 /.next/
@@ -8,10 +10,17 @@
 # production
 /build
 /dist
+/mcp-server/dist
 
 # env files
 .env*.local
 .env
+
+# debug artifacts
+/debug-logs/
+/.playwright-mcp/
+/.proxy-session-store.json
+/.tmp-*
 
 # misc
 .DS_Store

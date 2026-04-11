@@ -1,5 +1,0 @@
-[    1113ms] Unexpected token '?'
-[    1769ms] Unexpected token '?'
-[    4338ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3000/api/rest/resourceBundles/bulk?bundle=net.idauto.idp.authn_ui&bundle=net.idauto.arms.ui.AccountManagementModule&bundle=net.idauto.core.ui.ApplicationUIBase:0
-[    4351ms] [ERROR] An attempt to log an error was made with undefined for parameters msg and/or severity. @ http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fvendor-ca682b744ad9886c9e4299ec9178c9ef.js.gz:136993
-[    4351ms] [ERROR] There was a problem getting i18n strings in bootstrap process. @ http://localhost:3000/api/proxy?url=https%3A%2F%2Fassets.identitymgmt.net%2Frapididentity%2F2026.03.0-43980%2Fidp%2Fassets%2Fvendor-ca682b744ad9886c9e4299ec9178c9ef.js.gz:136995

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { X, Mail, Lock, Loader2, UserCircle, LogOut, CloudOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -19,6 +20,8 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const reset = () => {
     setEmail("");
@@ -51,14 +54,14 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
     }
   };
 
-  return (
+  const modal = (
     <AnimatePresence>
       {open && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-9999 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
           onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
         >
           <motion.div
@@ -167,6 +170,9 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
       )}
     </AnimatePresence>
   );
+
+  if (!mounted) return null;
+  return createPortal(modal, document.body);
 }
 
 interface AuthButtonProps {

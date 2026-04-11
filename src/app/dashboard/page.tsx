@@ -597,7 +597,7 @@ export default function DashboardPage() {
 
                 {/* Settings */}
                 <Link
-                  href="/setup"
+                  href="/settings"
                   className="p-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--bg-hover)] transition-colors"
                 >
                   <Settings className="w-4 h-4" />

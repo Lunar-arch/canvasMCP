@@ -1,5 +1,0 @@
-- generic [ref=e2]:
-  - navigation [ref=e3]:
-    - heading "RapidIdentity" [level=1] [ref=e4]
-  - main [ref=e5]:
-    - generic [ref=e7]: Bad Request

@@ -1,9 +1,0 @@
-- generic [ref=e3]:
-  - navigation [ref=e4]:
-    - heading "RapidIdentity" [level=1] [ref=e6]
-  - main [ref=e7]:
-    - generic [ref=e8]:
-      - img [ref=e9]
-      - heading "Login" [level=1] [ref=e10]
-      - alert [ref=e11]:
-        - generic [ref=e12]: An error has occurred while loading the page. Please try again later.
